@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# editors, Office lock files, node tooling for the document generators
+~$*
+node_modules/
+.DS_Store
+Thumbs.db

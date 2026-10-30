@@ -1,0 +1,9 @@
+{
+  "name": "ingredion-kickoff-deck",
+  "private": true,
+  "description": "Generates Ingredion_Agentic_AI_Factory_Project_Kickoff.pptx with pptxgenjs",
+  "type": "commonjs",
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}

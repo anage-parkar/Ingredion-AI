@@ -1,0 +1,7 @@
+{
+  "name": "ingredion-build-guides",
+  "private": true,
+  "description": "Generates the Agent A and Agent B build guides (.docx) from the content in agent_a.js, agent_b.js and shared.js",
+  "scripts": { "build": "node build.js .." },
+  "dependencies": { "docx": "9.5.1" }
+}

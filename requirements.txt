@@ -1,0 +1,14 @@
+# Runtime dependencies, kept small. Google Cloud SDKs are imported lazily and live in
+# requirements-gcp.txt (installed in the container image), so Dev and CI run without them.
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.9.0
+python-dotenv>=1.0.1
+httpx>=0.27.0                 # Model Armor REST calls
+
+# Persistence (used when INGREDION_MONGO_URI is set)
+pymongo>=4.8.0
+
+# Document readers without a cloud call
+openpyxl>=3.1                 # Excel POs
+python-docx>=1.1              # Word POs

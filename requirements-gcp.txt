@@ -1,0 +1,10 @@
+# Google Cloud SDKs for the Ingredion project (installed in the container image; all imported lazily).
+google-genai>=1.0                         # Gemini on Vertex AI (A2, A3, A6, B3, B6)
+google-auth>=2.30                         # service-account tokens (Model Armor), OIDC verification of Pub/Sub push
+google-cloud-documentai>=3.0              # PDF and scan layout for A3 and B3
+google-cloud-storage>=2.18                # files bucket, evidence buckets, extract landing
+google-cloud-bigquery>=3.25               # gold tables, outcome datasets
+google-cloud-pubsub>=2.23                 # api -> worker work topics
+opentelemetry-api>=1.27
+opentelemetry-sdk>=1.27
+opentelemetry-exporter-gcp-trace>=1.7     # Cloud Trace

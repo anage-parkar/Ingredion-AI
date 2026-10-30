@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory and Gold Data Flow</title>
+<meta name="description" content="What the factory package is (governance, agent ops and runtime in one), and how the Ingredion agents read gold data from BigQuery and Cloud Storage: inputs, outputs, code path.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Same reading column and tokens as the Agent Workflows and Data Architecture pages. */
+  :root {
+    --bg: #F5F7FA; --fg: #1B232D; --muted: #5C6774; --line: #D2D9E2; --surface: #FFFFFF; --band: #EBEFF4;
+    --ai: #A3650C; --ai-fill: #FBF0DC; --ok: #2B7A58; --ok-fill: #E4F3EC; --code-bg: #EDF0F4;
+    --wr: #2F5BD8; --wr-fill: #E6ECFB; --exit: #B3261E; --exit-fill: #FBE8E6;
+    --bz: #9A5B1F; --bz-fill: #F6E7D8; --sv: #5F6E80; --sv-fill: #E7ECF2; --gd: #8A6A00; --gd-fill: #FBF1CC;
+    --display: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131920; --fg: #E5EAF1; --muted: #9AA7B6; --line: #2C3742; --surface: #1B232D; --band: #19212A;
+      --ai: #E2A84F; --ai-fill: #3B2D14; --ok: #5FC08F; --ok-fill: #17392A; --code-bg: #1E2731;
+      --wr: #8EA6F7; --wr-fill: #1C2A4D; --exit: #F08C84; --exit-fill: #47201D;
+      --bz: #D99A5B; --bz-fill: #3A2816; --sv: #A9B6C6; --sv-fill: #273140; --gd: #E0BE4A; --gd-fill: #3A3112; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131920; --fg: #E5EAF1; --muted: #9AA7B6; --line: #2C3742; --surface: #1B232D; --band: #19212A;
+    --ai: #E2A84F; --ai-fill: #3B2D14; --ok: #5FC08F; --ok-fill: #17392A; --code-bg: #1E2731;
+    --wr: #8EA6F7; --wr-fill: #1C2A4D; --exit: #F08C84; --exit-fill: #47201D;
+    --bz: #D99A5B; --bz-fill: #3A2816; --sv: #A9B6C6; --sv-fill: #273140; --gd: #E0BE4A; --gd-fill: #3A3112; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; }
+  header h1 { font-family: var(--display); font-weight: 600; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 0 0 8px; text-wrap: balance; }
+  header p.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); margin-top: 14px; }
+  nav.toc { margin-top: 18px; font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  nav.toc a { text-decoration: none; border-bottom: 1px solid var(--line); }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 48px 0 10px; text-wrap: balance; }
+  h2 .part { color: var(--muted); font-weight: 500; margin-right: 8px; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 26px 0 8px; }
+  p { max-width: 72ch; }
+  .verdict { display: grid; grid-template-columns: auto 1fr; gap: 14px 18px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-top: 22px; }
+  .verdict .pill { background: var(--ok-fill); color: var(--ok); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
+  .verdict .pill.amber { background: var(--ai-fill); color: var(--ai); }
+  .verdict .pill.gold { background: var(--gd-fill); color: var(--gd); }
+  .verdict p { margin: 0; }
+  .verdict ol, .verdict ul { margin: 10px 0 0; padding-left: 20px; }
+  .verdict li { margin: 5px 0; }
+  @media (max-width: 560px) { .verdict { grid-template-columns: 1fr; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 22px; height: 12px; border: 1.5px solid currentColor; border-radius: 3px; background: var(--surface); color: var(--fg); }
+  .legend i.ai { background: var(--ai-fill); border-color: var(--ai); }
+  .legend i.wr { background: var(--wr-fill); border-color: var(--wr); }
+  .legend i.exit { background: var(--exit-fill); border-color: var(--exit); }
+  .legend i.sv { background: var(--sv-fill); border-color: var(--sv); }
+  .legend i.gd { background: var(--gd-fill); border-color: var(--gd); }
+  .legend i.ok { background: var(--ok-fill); border-color: var(--ok); }
+  figure { margin: 0; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .dg { display: block; width: 1220px; max-width: none; height: auto; }
+  @media (min-width: 1200px) { .dg { width: 100%; } }
+  figcaption { font-size: 13.5px; color: var(--muted); margin-top: 10px; max-width: 80ch; }
+  .dg text { font-family: var(--body); font-size: 11px; fill: currentColor; }
+  .dg .t { font-size: 12px; font-weight: 600; }
+  .dg .mono { font-family: var(--mono); font-size: 10.5px; }
+  .dg .lane { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; fill: var(--muted); }
+  .dg .lbl { fill: var(--muted); }
+  .dg .band { fill: var(--band); stroke: none; }
+  .dg .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .dg .ai { fill: var(--ai-fill); stroke: var(--ai); }
+  .dg .wr { fill: var(--wr-fill); stroke: var(--wr); }
+  .dg .exit { fill: var(--exit-fill); stroke: var(--exit); }
+  .dg .sv { fill: var(--sv-fill); stroke: var(--sv); }
+  .dg .gd { fill: var(--gd-fill); stroke: var(--gd); }
+  .dg .ok { fill: var(--ok-fill); stroke: var(--ok); }
+  .dg .bandfill { stroke: none; opacity: .55; }
+  .dg .human { stroke-dasharray: 6 4; }
+  .dg .chip { fill: var(--surface); stroke: currentColor; stroke-width: 1; }
+  .dg .num { fill: var(--fg); }
+  .dg .numtext { fill: var(--bg); font-weight: 600; font-size: 10.5px; }
+  .dg .ln { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .dg .ln.thin { stroke-width: 1; }
+  .dg .gdln { fill: none; stroke: var(--gd); stroke-width: 1.3; }
+  .dg .wrln { fill: none; stroke: var(--wr); stroke-width: 1.3; }
+  .dg .exln { fill: none; stroke: var(--exit); stroke-width: 1.3; }
+  .dg .okln { fill: none; stroke: var(--ok); stroke-width: 1.3; }
+  .dg .mk { fill: currentColor; }
+  .dg .mk-gd { fill: var(--gd); }
+  .dg .mk-wr { fill: var(--wr); }
+  .dg .mk-ex { fill: var(--exit); }
+  .dg .mk-ok { fill: var(--ok); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .02em; color: var(--muted); }
+  td.k { font-weight: 600; white-space: nowrap; }
+  td code, th code { white-space: normal; overflow-wrap: anywhere; }
+  .tbl { overflow-x: auto; }
+  .tbl table { min-width: 720px; }
+  .yes { color: var(--ok); font-weight: 600; white-space: nowrap; }
+  .cond { color: var(--ai); font-weight: 600; white-space: nowrap; }
+  .flag { color: var(--exit); font-weight: 600; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .tag.gd { color: var(--gd); background: var(--gd-fill); border-color: var(--gd); }
+  .tag.ai { color: var(--ai); background: var(--ai-fill); border-color: var(--ai); }
+  .tag.sv { color: var(--sv); background: var(--sv-fill); border-color: var(--sv); }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 0.92em; }
+  ul.tight, ol.tight { margin: 8px 0; padding-left: 20px; }
+  ul.tight li, ol.tight li { margin: 4px 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; }
+  .two > div { min-width: 0; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+  .note { font-size: 13.5px; color: var(--muted); }
+  .callout { border-left: 3px solid var(--gd); background: var(--surface); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 16px 0; max-width: 80ch; }
+  .callout.ai { border-left-color: var(--ai); }
+  .callout.exit { border-left-color: var(--exit); }
+  .callout p { margin: 6px 0; }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 14px 0; max-width: 84ch; }
+  .steps li { counter-increment: s; position: relative; padding: 10px 0 12px 44px; border-bottom: 1px solid var(--line); }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 10px; width: 28px; height: 28px; border-radius: 50%; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 13px; display: grid; place-items: center; }
+  .steps li strong { font-family: var(--display); font-size: 15.5px; }
+  .steps li p { margin: 4px 0 0; }
+  .steps li pre { margin: 8px 0 0; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; margin: 8px 0; }
+  .kv dt { font-weight: 600; white-space: nowrap; }
+  .kv dd { margin: 0; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>The factory package, and how the agents read gold data</h1>
+  <p class="lede">Two questions from the Parkar engineering team, answered against the code as it stands on 30 October 2026: what kind of thing <code>factory/</code> is (governance, LLM and agent operations, or something else), and exactly how a running agent gets its data out of the BigQuery gold tables and the Cloud Storage files bucket: what goes in, what comes back, and where it ends up.</p>
+  <div class="meta"><span>Prepared 30 October 2026 · Parkar delivery team</span><span>Code: <code>Ingredion/</code>, branch <code>feature/ingredion-agent</code>, 128 tests green</span><span>Companion to the Agent Workflows and Data Architecture pages</span></div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#part1">1 · What factory/ is</a>
+    <a href="#layers">Three layers in one package</a>
+    <a href="#naming">Keep the name or split it</a>
+    <a href="#part2">2 · The gold data flow</a>
+    <a href="#oneread">One read, step by step</a>
+    <a href="#examples">Worked examples</a>
+    <a href="#io">Inputs and outputs per method</a>
+    <a href="#stale">The staleness guard</a>
+    <a href="#back">What is written back</a>
+    <a href="#tests">The in-memory twin and the contract tests</a>
+    <a href="#config">Configuration</a>
+    <a href="#limits">Limits and open points</a>
+  </nav>
+</header>
+
+<h2 id="part1"><span class="part">Part 1</span>What <code>factory/</code> is</h2>
+
+<section class="verdict" aria-label="Answer in one paragraph">
+  <span class="pill gold">Answer</span>
+  <div>
+    <p><strong>It is the factory's control plane and shared runtime, and it carries three concerns at once: governance, agent operations and execution mechanics.</strong> Calling it "the governance layer" is true of about half of it (the guardrails, the closed reason codes, the human gate, the append-only audit, the claims and state machines, the kill switch, the evidence); calling it "LLM / Agent Ops" is true of another third (the model gateway with versioned prompts, the evaluation scorecards, tracing, the outcome rows, one environment contract); the rest is plain runtime (the case, the poller, the dispatch between api and worker, the gold and file readers). The useful mental model is <em>three layers in one package</em>, with one rule that matters more than the name: <code>factory</code> imports neither agent, both agents import <code>factory</code>, and <code>app</code> imports all three.</p>
+    <ul>
+      <li><strong>Governance</strong> answers "what are the agents allowed to do, and can we prove afterwards what they did?"</li>
+      <li><strong>Agent Ops</strong> answers "how do we run, measure, change and switch off the agents without touching their business logic?"</li>
+      <li><strong>Runtime</strong> answers "how does a case physically move, and how does it reach the data?"</li>
+    </ul>
+  </div>
+</section>
+
+<h3 id="layers">Three layers in one package</h3>
+<p>Figure 1 places every sub-package of <code>factory/</code> on one of the three layers, with the two agents above it and the Google Cloud services below. Nothing in a layer is "only" governance or "only" operations; the layer says what question the module exists to answer.</p>
+<div class="legend" aria-hidden="true"><span><i class="gd"></i> governance: controls and proof</span><span><i class="ai"></i> agent ops: run, measure, change</span><span><i class="sv"></i> runtime: move the case, reach the data</span><span><i></i> agent and service code</span></div>
+<figure>
+  <div class="scroll">
+  <svg class="dg" viewBox="0 0 1220 600" role="img" aria-label="The factory package drawn as three layers (governance, agent ops, runtime) between the two agents and the app above and the Google Cloud services below; the agents import factory, factory imports neither agent.">
+    <defs>
+      <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+    </defs>
+    <!-- callers -->
+    <rect x="20" y="20" width="220" height="60" rx="8" class="box"/>
+    <text x="130" y="44" text-anchor="middle" class="t">app/</text>
+    <text x="130" y="62" text-anchor="middle" class="lbl">api (events, review, ops) · worker</text>
+    <rect x="260" y="20" width="460" height="60" rx="8" class="box"/>
+    <text x="490" y="44" text-anchor="middle" class="t">order_intake_agent/</text>
+    <text x="490" y="62" text-anchor="middle" class="lbl">steps A1–A10 · connectors (gold, stubs) · outcomes · runtime</text>
+    <rect x="740" y="20" width="460" height="60" rx="8" class="box"/>
+    <text x="970" y="44" text-anchor="middle" class="t">prebill_agent/</text>
+    <text x="970" y="62" text-anchor="middle" class="lbl">steps B1–B8 · connectors (gold, landing, stubs) · outcomes · runtime</text>
+    <line x1="130" y1="80" x2="130" y2="128" class="ln" marker-end="url(#a1)"/>
+    <line x1="490" y1="80" x2="490" y2="128" class="ln" marker-end="url(#a1)"/>
+    <line x1="970" y1="80" x2="970" y2="128" class="ln" marker-end="url(#a1)"/>
+    <text x="610" y="112" text-anchor="middle" class="lbl">imports · the arrow never points up: factory knows neither agent</text>
+
+    <!-- factory frame -->
+    <rect x="20" y="130" width="1180" height="348" rx="10" class="box"/>
+    <text x="34" y="150" class="t">factory/  — shared runtime and control plane</text>
+
+    <!-- governance band -->
+    <rect x="30" y="160" width="1160" height="96" rx="8" class="gd bandfill"/>
+    <text x="40" y="176" class="lane">Governance · what the agents may do, provable afterwards</text>
+    <g class="t">
+      <rect x="40" y="184" width="136" height="62" rx="6" class="box"/><text x="108" y="206" text-anchor="middle">guardrails</text><text x="108" y="222" text-anchor="middle" class="lbl">Model Armor, fails closed</text><text x="108" y="236" text-anchor="middle" class="lbl">pattern guard always</text>
+      <rect x="186" y="184" width="136" height="62" rx="6" class="box"/><text x="254" y="206" text-anchor="middle">rules · reason codes</text><text x="254" y="222" text-anchor="middle" class="lbl">closed catalogue (68)</text><text x="254" y="236" text-anchor="middle" class="lbl">routing and owners</text>
+      <rect x="332" y="184" width="136" height="62" rx="6" class="box human"/><text x="400" y="206" text-anchor="middle">review</text><text x="400" y="222" text-anchor="middle" class="lbl">the human gate</text><text x="400" y="236" text-anchor="middle" class="lbl">decision stored first</text>
+      <rect x="478" y="184" width="136" height="62" rx="6" class="box"/><text x="546" y="206" text-anchor="middle">audit</text><text x="546" y="222" text-anchor="middle" class="lbl">append-only</text><text x="546" y="236" text-anchor="middle" class="lbl">no update, no delete</text>
+      <rect x="624" y="184" width="136" height="62" rx="6" class="box"/><text x="692" y="206" text-anchor="middle">intake · claims, states</text><text x="692" y="222" text-anchor="middle" class="lbl">one case once</text><text x="692" y="236" text-anchor="middle" class="lbl">explicit transitions</text>
+      <rect x="770" y="184" width="136" height="62" rx="6" class="box"/><text x="838" y="206" text-anchor="middle">kill switch</text><text x="838" y="222" text-anchor="middle" class="lbl">Ingredion-controlled</text><text x="838" y="236" text-anchor="middle" class="lbl">env, Mongo, API</text>
+      <rect x="916" y="184" width="136" height="62" rx="6" class="box"/><text x="984" y="206" text-anchor="middle">platform · evidence, files</text><text x="984" y="222" text-anchor="middle" class="lbl">what the model saw</text><text x="984" y="236" text-anchor="middle" class="lbl">files by hash</text>
+      <rect x="1062" y="184" width="118" height="62" rx="6" class="box"/><text x="1121" y="206" text-anchor="middle">prompts</text><text x="1121" y="222" text-anchor="middle" class="lbl">versioned files</text><text x="1121" y="236" text-anchor="middle" class="lbl">SHA-256 in audit</text>
+    </g>
+
+    <!-- agent ops band -->
+    <rect x="30" y="264" width="1160" height="96" rx="8" class="ai bandfill"/>
+    <text x="40" y="280" class="lane">Agent Ops · run, measure, change and stop the agents without touching the steps</text>
+    <g class="t">
+      <rect x="40" y="288" width="158" height="62" rx="6" class="box"/><text x="119" y="310" text-anchor="middle">model_gateway</text><text x="119" y="326" text-anchor="middle" class="lbl">Gemini on Vertex AI, Document AI</text><text x="119" y="340" text-anchor="middle" class="lbl">schema-enforced answers</text>
+      <rect x="208" y="288" width="158" height="62" rx="6" class="box"/><text x="287" y="310" text-anchor="middle">evaluation</text><text x="287" y="326" text-anchor="middle" class="lbl">SOW 2.7 and 3.4 scorecards</text><text x="287" y="340" text-anchor="middle" class="lbl">backtest, every build</text>
+      <rect x="376" y="288" width="158" height="62" rx="6" class="box"/><text x="455" y="310" text-anchor="middle">observability · tracing</text><text x="455" y="326" text-anchor="middle" class="lbl">OpenTelemetry → Cloud Trace</text><text x="455" y="340" text-anchor="middle" class="lbl">one span per model call</text>
+      <rect x="544" y="288" width="158" height="62" rx="6" class="box"/><text x="623" y="310" text-anchor="middle">platform · outcomes</text><text x="623" y="326" text-anchor="middle" class="lbl">one BigQuery row per case</text><text x="623" y="340" text-anchor="middle" class="lbl">dashboards read here</text>
+      <rect x="712" y="288" width="158" height="62" rx="6" class="box"/><text x="791" y="310" text-anchor="middle">settings · wiring</text><text x="791" y="326" text-anchor="middle" class="lbl">one environment contract</text><text x="791" y="340" text-anchor="middle" class="lbl">swap model, processor, template</text>
+      <rect x="880" y="288" width="158" height="62" rx="6" class="box"/><text x="959" y="310" text-anchor="middle">observability · router</text><text x="959" y="326" text-anchor="middle" class="lbl">/ops: kill switch, sweep</text><text x="959" y="340" text-anchor="middle" class="lbl">runtime health</text>
+      <rect x="1048" y="288" width="132" height="62" rx="6" class="box"/><text x="1114" y="310" text-anchor="middle">dispatch</text><text x="1114" y="326" text-anchor="middle" class="lbl">api ⇄ worker</text><text x="1114" y="340" text-anchor="middle" class="lbl">scale the two apart</text>
+    </g>
+
+    <!-- runtime band -->
+    <rect x="30" y="368" width="1160" height="96" rx="8" class="sv bandfill"/>
+    <text x="40" y="384" class="lane">Runtime · move the case, reach the data</text>
+    <g class="t">
+      <rect x="40" y="392" width="222" height="62" rx="6" class="box"/><text x="151" y="414" text-anchor="middle">case.py</text><text x="151" y="430" text-anchor="middle" class="lbl">Case, Flag, StepResult</text><text x="151" y="444" text-anchor="middle" class="lbl">the unit of work</text>
+      <rect x="272" y="392" width="222" height="62" rx="6" class="box"/><text x="383" y="414" text-anchor="middle">intake · poller, state machine</text><text x="383" y="430" text-anchor="middle" class="lbl">sweep an intake source</text><text x="383" y="444" text-anchor="middle" class="lbl">A and B transition tables</text>
+      <rect x="504" y="392" width="222" height="62" rx="6" class="box"/><text x="615" y="414" text-anchor="middle">dispatch · queues</text><text x="615" y="430" text-anchor="middle" class="lbl">WorkItem, Pub/Sub pull</text><text x="615" y="444" text-anchor="middle" class="lbl">inline on a laptop</text>
+      <rect x="736" y="392" width="222" height="62" rx="6" class="box"/><text x="847" y="414" text-anchor="middle">platform · gold</text><text x="847" y="430" text-anchor="middle" class="lbl">Lookup, registry, staleness guard</text><text x="847" y="444" text-anchor="middle" class="lbl">in-memory and BigQuery clients</text>
+      <rect x="968" y="392" width="212" height="62" rx="6" class="box"/><text x="1074" y="414" text-anchor="middle">platform · files</text><text x="1074" y="430" text-anchor="middle" class="lbl">gs:// by pointer</text><text x="1074" y="444" text-anchor="middle" class="lbl">SHA-256 verified</text>
+    </g>
+
+    <!-- cloud -->
+    <line x1="610" y1="478" x2="610" y2="516" class="ln" marker-end="url(#a1)"/>
+    <text x="625" y="502" class="lbl">lazy SDK imports: Dev and the tests never load them</text>
+    <rect x="20" y="518" width="1180" height="62" rx="10" class="band"/>
+    <text x="34" y="538" class="lane">Ingredion Google Cloud project</text>
+    <g class="mono">
+      <rect x="34" y="546" width="118" height="24" rx="12" class="chip"/><text x="93" y="562" text-anchor="middle">Vertex AI · Gemini</text>
+      <rect x="162" y="546" width="100" height="24" rx="12" class="chip"/><text x="212" y="562" text-anchor="middle">Model Armor</text>
+      <rect x="272" y="546" width="100" height="24" rx="12" class="chip"/><text x="322" y="562" text-anchor="middle">Document AI</text>
+      <rect x="382" y="546" width="150" height="24" rx="12" class="chip"/><text x="457" y="562" text-anchor="middle">BigQuery · gold, ops, outcomes</text>
+      <rect x="542" y="546" width="170" height="24" rx="12" class="chip"/><text x="627" y="562" text-anchor="middle">Cloud Storage · files, evidence</text>
+      <rect x="722" y="546" width="80" height="24" rx="12" class="chip"/><text x="762" y="562" text-anchor="middle">Pub/Sub</text>
+      <rect x="812" y="546" width="92" height="24" rx="12" class="chip"/><text x="858" y="562" text-anchor="middle">Cloud Trace</text>
+      <rect x="914" y="546" width="92" height="24" rx="12" class="chip"/><text x="960" y="562" text-anchor="middle">Cloud Run</text>
+      <rect x="1016" y="546" width="110" height="24" rx="12" class="chip"/><text x="1071" y="562" text-anchor="middle">Secret Manager</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>Figure 1 · <code>factory/</code> as three layers. The agents sit on top of it and contain only business logic and connectors; the factory contains everything the two SOWs describe as common. The dependency arrow points one way, and the cloud SDKs are imported only when a client is first needed.</figcaption>
+</figure>
+
+<h3>What each module governs or operates, and which SOW clause it serves</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Module</th><th>Layer</th><th>What it does for the agents</th><th>Why it is in <code>factory</code> and not in an agent</th><th>SOW hook</th></tr></thead>
+  <tbody>
+    <tr><td class="k">guardrails/</td><td><span class="tag gd">governance</span></td><td>Screens every string before it reaches Gemini: Model Armor in the project (fails closed when unreachable), the pattern guard always. Verdicts travel with the model result into the audit record.</td><td>One chain for both agents means one template, one test, one proof that no text bypassed it.</td><td>5.4 prompt-injection tests · 1.7 nothing sent is used for training</td></tr>
+    <tr><td class="k">rules/</td><td><span class="tag gd">governance</span></td><td>The closed reason-code catalogue (routing: exit, review, flag, info; proposed owner), the rule engine with verdicts, the composite confidence computed from evidence rather than asked of the model.</td><td>Reviewer screens, dashboards and the audit speak one vocabulary; an unknown code raises instead of slipping through.</td><td>Stage 2 agreement on reason codes · 2.7 / 3.4 thresholds</td></tr>
+    <tr><td class="k">review/</td><td><span class="tag gd">governance</span></td><td>The human gate: one queue, the decision stored before the pipeline resumes, scoped per agent on the API.</td><td>The gate is the same control in both SOWs; one implementation means one audit shape for every decision.</td><td>Phase 1 "every case reviewed" · Gate 5 Phase 2 decision</td></tr>
+    <tr><td class="k">audit/</td><td><span class="tag gd">governance</span></td><td>Append-only records: what was read, decided, drafted, posted, by whom, with prompt reference and hash, tokens, latency, guard verdicts.</td><td>The record is the product; scorecards and dashboards are computed from it.</td><td>5.3 retention categories · traceability measure</td></tr>
+    <tr><td class="k">intake/</td><td><span class="tag gd">governance</span> <span class="tag sv">runtime</span></td><td>One-case-once claims (an atomic insert), the per-case state machines (transitions outside the table raise), the sweep poller.</td><td>Duplicate orders are the Order Intake nightmare; the control lives below both agents.</td><td>Exactly-once design in Part A · restart reconciliation</td></tr>
+    <tr><td class="k">observability/kill_switch</td><td><span class="tag gd">governance</span></td><td>Stops new cases immediately from an environment variable, Mongo or the ops API; in-flight cases finish or return.</td><td>Ingredion must be able to stop both agents the same way.</td><td>Operations clause · cut-over by routing</td></tr>
+    <tr><td class="k">platform/evidence, platform/files</td><td><span class="tag gd">governance</span></td><td>Keeps what the model saw, its raw answer, the SAP payload, the pre-bill snapshot per version; fetches files by pointer and verifies the SHA-256 on the gold row.</td><td>Evidence is a property of every case regardless of agent.</td><td>5.3 categories · dispute traceability</td></tr>
+    <tr><td class="k">model_gateway/</td><td><span class="tag ai">agent ops</span></td><td>The only place either agent talks to a model: versioned prompts, Gemini with a response schema (JSON-mode fallback), Document AI and the plain readers, tokens and latency captured.</td><td>Changing the model, the processor or a prompt is one reviewed change in one place.</td><td>Allow-listed model · prompt change = release</td></tr>
+    <tr><td class="k">evaluation/</td><td><span class="tag ai">agent ops</span></td><td>The two scorecards and the CLI that runs them; the Stage 1 backtest scorer.</td><td>Gates are passed on these numbers for both agents.</td><td>2.7 / 3.4 · Gate 1, 3, 4</td></tr>
+    <tr><td class="k">observability/tracing, router</td><td><span class="tag ai">agent ops</span></td><td>Cloud Trace spans; the ops routes (kill switch, sweep, health).</td><td>Operations see one shape for two agents.</td><td>Monitoring deliverables</td></tr>
+    <tr><td class="k">platform/outcomes</td><td><span class="tag ai">agent ops</span></td><td>One BigQuery row per finished case or version, the queryable projection of the audit.</td><td>Dashboards and the scorecards read tables, not Mongo.</td><td>2.7 / 3.4 dashboards</td></tr>
+    <tr><td class="k">settings.py, wiring.py</td><td><span class="tag ai">agent ops</span></td><td>One environment contract read lazily; builders for the model stack, the stores and the platform clients.</td><td>Both runtimes assemble the same way; Dev, Test and Prod differ only in variables.</td><td>Environment promotion</td></tr>
+    <tr><td class="k">dispatch.py</td><td><span class="tag ai">agent ops</span> <span class="tag sv">runtime</span></td><td><code>WorkItem</code> between the api and the worker; Pub/Sub or inline.</td><td>Scaling the ingress apart from the long-running pipeline is a property of the factory, not of a use case.</td><td>Cloud Run topology</td></tr>
+    <tr><td class="k">case.py, platform/gold</td><td><span class="tag sv">runtime</span></td><td>The unit of work; the gold table registry, the lookup language, the two clients and the staleness guard.</td><td>Both agents read the same platform the same way (Part 2).</td><td>Data-platform input of 26 Oct</td></tr>
+  </tbody>
+</table></div>
+
+<h3>What is deliberately not in it</h3>
+<ul class="tight">
+  <li><strong>Business logic.</strong> A step that decides something about an order or an invoice lives in <code>order_intake_agent/steps</code> or <code>prebill_agent/steps</code>. The factory never knows what a PO is.</li>
+  <li><strong>Connectors to Ingredion systems.</strong> The protocols, the gold readers, the landing readers and the stubs live with the agent that owns the read or write scope; the factory only supplies the generic gold and file clients they build on.</li>
+  <li><strong>The HTTP surface and the worker loop.</strong> Those are <code>app/</code>, which imports everything; the factory offers routers as functions and never imports <code>app</code>.</li>
+  <li><strong>Infrastructure.</strong> Buckets, topics, subscriptions with their dead-letter topics, service accounts and the Model Armor template are Terraform and Ingredion's, not Python.</li>
+</ul>
+
+<h3 id="naming">Keep the name or split it</h3>
+<p>Three options were weighed. The recommendation is the first; the mapping above is what a reader needs, and the one-way import rule is what the architecture actually depends on.</p>
+<div class="tbl"><table>
+  <thead><tr><th>Option</th><th>What changes</th><th>For</th><th>Against</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Keep <code>factory/</code>, document the three layers</td><td>This page; the package docstring already names the layers.</td><td>Matches the SOW's own term, "Agentic AI Factory"; one import; the tests and both runtimes stay as they are.</td><td>A newcomer has to be told that "factory" is not a design-pattern factory.</td><td><span class="yes">Recommended</span></td></tr>
+    <tr><td class="k">Split into <code>governance/</code>, <code>agentops/</code>, <code>runtime/</code></td><td>Move the modules per the table; three imports per agent.</td><td>The layer is visible in every import line.</td><td>Review, audit and evidence belong together and would be cut from the state machine and claims they depend on; two days of churn across 128 tests for a label.</td><td><span class="flag">Not now</span></td></tr>
+    <tr><td class="k">Rename to <code>platform/</code> or <code>core/</code></td><td>One rename.</td><td>Shorter.</td><td><code>factory.platform</code> is already the data-platform package, so the name would collide with the data team's vocabulary; <code>core</code> says nothing.</td><td><span class="flag">No</span></td></tr>
+  </tbody>
+</table></div>
+<div class="callout">
+  <p><strong>How to say it to Ingredion.</strong> "The factory is the shared runtime and control plane of both agents. Its governance controls are the guardrails, the closed reason codes, the human gate, the append-only audit, one-case-once, the kill switch and the evidence bucket. Its operations capabilities are the model gateway, the scorecards, tracing, the outcome tables and one environment contract. The use-case logic sits above it and cannot bypass it, because every model call, every write and every decision passes through a factory component."</p>
+  <p>One cheap enforcement is worth adding in Stage 1: an import-linter contract that forbids <code>factory</code> from importing <code>app</code>, <code>order_intake_agent</code> or <code>prebill_agent</code>, run in the same CI job as the SOW 5.4 scans.</p>
+</div>
+
+<h2 id="part2"><span class="part">Part 2</span>How the code reads gold data from BigQuery and Cloud Storage</h2>
+
+<section class="verdict" aria-label="The flow in one paragraph">
+  <span class="pill">In one paragraph</span>
+  <div>
+    <p>A step never knows where its data comes from. It calls a method on a connector protocol (<code>ctx.sap_master.find_partner(role, text)</code>, <code>ctx.pros.contract_price(sold_to, material, on_date)</code>, <code>ctx.salesforce.get_email(case_id)</code>). In the project those methods are implemented by the gold connectors, which inherit <code>GoldReader</code>. A gold connector turns the call into a <strong><code>Lookup</code></strong> (table, equality and range filters, order, limit), the reader first asks the <strong>staleness guard</strong> whether the table was refreshed recently enough (one query on <code>ops.freshness</code>, cached for a minute), then the <strong><code>BigQueryGoldClient</code></strong> validates the lookup against the <strong>table registry</strong>, renders one parameterised <code>SELECT</code>, runs it and returns the rows as plain dicts. The connector maps the dicts to the Pydantic models the steps already use (<code>PartnerMatch</code>, <code>CMIRMatch</code>, <code>PriceRecord</code>, <code>CanonicalDoc</code>, <code>EmailBundle</code> …). When a row points at a file (a PO attachment, a PO PDF), the connector fetches the object from the files bucket by its <code>gs://</code> URI and verifies the SHA-256 recorded on the row before the bytes become an <code>Attachment</code>. What the step receives is therefore identical whether the backend is BigQuery or the in-memory twin the tests use.</p>
+  </div>
+</section>
+
+<h3>Two ways a case reaches the agent, and what the input looks like</h3>
+<div class="two">
+  <div>
+    <p><strong>Event push (normal path).</strong> The data platform publishes a change signal; the subscription pushes it to the api. The body is a Pub/Sub envelope whose <code>message.data</code> is base64 JSON:</p>
+<pre>POST /events/order-intake/cases          Authorization: Bearer &lt;OIDC token&gt;
+{ "message": { "data": base64({
+      "case_id": "5003000000AbCdE", "cohort": "cohort-1",
+      "customer_name": "Kraft Heinz", "received_at": "2026-11-03T14:02:11Z",
+      "gold_refresh_ts": "2026-11-03T14:02:40Z" }),
+    "attributes": {}, "messageId": "1234567890", "publishTime": "…" },
+  "subscription": "projects/ingredion-prod/subscriptions/gold-cases-changed-agent-a" }</pre>
+    <p><code>app/routers/events.py</code> decodes it, <code>runtime.raw_from_event(payload)</code> turns it into an <code>IntakeCase</code> and then a <code>RawCase(source_ref=case_id, marker=gold_refresh_ts, payload=IntakeCase as JSON)</code>, the api claims <code>case_id</code> once and publishes a <code>WorkItem</code> to the agent's work topic. The worker pulls it and calls <code>pipeline.process_raw(RawCase)</code>.</p>
+  </div>
+  <div>
+    <p><strong>Sweep (catch-up path).</strong> <code>POST /api/order-intake/ops/poll</code> runs the factory <code>Poller</code> over the agent's intake source. On gold that source is <code>GoldCaseQueue</code>, whose <code>fetch(after)</code> is itself a gold read:</p>
+<pre>Lookup("gold_cases.email_order_case",
+       where={"routed_to": "agent"},
+       gt={"updated_at": &lt;last marker&gt;},
+       order_by=("updated_at",), limit=200)</pre>
+    <p>Every row becomes the same <code>RawCase</code> shape as the event path (<code>marker = updated_at</code>), the poller claims each case and hands it to the dispatcher. For Agent B the source is <code>GoldSAPBilling</code> over <code>gold_billing.invoice_ready_order</code> with <code>ready_at</code> as the marker. Nothing downstream can tell the two paths apart.</p>
+  </div>
+</div>
+
+<h3>Which class answers which protocol in the project</h3>
+<p>The runtime of each agent (<code>order_intake_agent/runtime.py</code>, <code>prebill_agent/runtime.py</code>) reads <code>INGREDION_PLATFORM</code>. With <code>gold</code> it builds one <code>BigQueryGoldClient</code> and one <code>GcsFileStore</code> through <code>factory/wiring.py</code> and hands them to every connector; with <code>stub</code> (the default on a laptop) it builds the in-memory stubs. The writes stay on the stubs in both modes until Gate 2.</p>
+<div class="tbl"><table>
+  <thead><tr><th>Protocol (what the steps see)</th><th>Agent</th><th>Gold implementation</th><th>Tables read</th><th>Files</th></tr></thead>
+  <tbody>
+    <tr><td class="k">CaseQueue · IntakeSource</td><td>A</td><td><code>GoldCaseQueue</code></td><td><code>gold_cases.email_order_case</code></td><td>—</td></tr>
+    <tr><td class="k">SalesforceCases (reads)</td><td>A</td><td><code>GoldSalesforceCases</code> (writes delegated to the stub)</td><td><code>gold_cases.email_order_case</code>, <code>gold_cases.case_attachment</code></td><td>attachment bytes from <code>FILES_BUCKET</code></td></tr>
+    <tr><td class="k">SAPMasterData</td><td>A</td><td><code>GoldSAPMasterData</code></td><td><code>gold_sales.customer</code>, <code>customer_material</code>, <code>material_uom</code>, <code>gold_reference.uom_conversion</code></td><td>—</td></tr>
+    <tr><td class="k">SAPOrders</td><td>A</td><td><code>GoldSAPOrders</code> (ATP and the post-timeout lookup delegated to the live connector)</td><td><code>gold_sales.sales_order</code>, <code>sales_order_item</code>, <code>gold_pricing.condition</code>, <code>contract</code></td><td>—</td></tr>
+    <tr><td class="k">SAPBilling · IntakeSource</td><td>B</td><td><code>GoldSAPBilling</code></td><td><code>gold_billing.invoice_ready_order</code>, <code>billing_document</code>, <code>gold_sales.delivery</code>, <code>customer</code>, <code>gold_pricing.condition</code></td><td>—</td></tr>
+    <tr><td class="k">PROS</td><td>B</td><td><code>GoldPROS</code></td><td><code>gold_pricing.pros_agreement</code></td><td>—</td></tr>
+    <tr><td class="k">SalesforceOrders</td><td>B</td><td><code>GoldSalesforceOrders</code></td><td><code>gold_sales.sales_order</code></td><td>—</td></tr>
+    <tr><td class="k">Ariba</td><td>B</td><td><code>GoldAriba</code></td><td><code>gold_procurement.ariba_po</code></td><td>—</td></tr>
+    <tr><td class="k">TermSync</td><td>B</td><td><code>GoldTermSync</code>, or <code>LandingTermSync</code> when an extract landing is configured</td><td><code>gold_ar.dispute</code></td><td>CSV from <code>EXTRACT_BUCKET</code></td></tr>
+    <tr><td class="k">RateFiles</td><td>B</td><td><code>GoldRateFiles</code>, or <code>LandingRateFiles</code> when an extract landing is configured</td><td><code>gold_pricing.freight_charge</code>, <code>fuel_rate</code>, <code>gold_sales.material_uom</code></td><td>CSV from <code>EXTRACT_BUCKET</code></td></tr>
+    <tr><td class="k">Mailbox (PO PDF fallback)</td><td>B</td><td><code>FilesBucketMailbox</code></td><td><code>gold_cases.case_attachment</code> (kind <code>po</code>)</td><td>PDF bytes from <code>FILES_BUCKET</code></td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="oneread">One read, step by step</h3>
+<p>Figure 2 follows a single Order Intake case from the change signal to the moment A4 holds a list of SAP partners, with the file fetch and the write-back shown on the same picture. The numbers match the steps under the figure.</p>
+<div class="legend" aria-hidden="true"><span><i class="gd"></i> data platform (data team)</span><span><i class="wr"></i> api and worker</span><span><i class="sv"></i> factory platform code</span><span><i class="ai"></i> what the step receives</span><span><i class="ok"></i> written back by the agent</span></div>
+<figure>
+  <div class="scroll">
+  <svg class="dg" viewBox="0 0 1220 640" role="img" aria-label="Sequence of one gold read: a Pub/Sub push reaches the api, which claims the case and publishes a work item; the worker runs the pipeline; step A4 calls the connector; the GoldReader checks ops.freshness, compiles a parameterised SELECT, queries BigQuery and maps rows to Pydantic models; attachments are downloaded from the files bucket and hash-checked; the evidence bucket and the outcomes dataset receive the write-back.">
+    <defs>
+      <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+      <marker id="a2g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk-gd"/></marker>
+      <marker id="a2k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk-ok"/></marker>
+    </defs>
+    <!-- platform band -->
+    <rect x="20" y="16" width="1180" height="92" rx="10" class="gd bandfill"/>
+    <text x="32" y="34" class="lane">Data platform · Ingredion data team · BigQuery and Cloud Storage</text>
+    <rect x="40" y="44" width="200" height="54" rx="7" class="box gd"/><text x="140" y="66" text-anchor="middle" class="t">Pub/Sub topic</text><text x="140" y="82" text-anchor="middle" class="mono">gold.cases.changed</text>
+    <rect x="300" y="44" width="230" height="54" rx="7" class="box gd"/><text x="415" y="66" text-anchor="middle" class="t">ops.freshness</text><text x="415" y="82" text-anchor="middle" class="mono">table_name · refreshed_at</text>
+    <rect x="590" y="44" width="300" height="54" rx="7" class="box gd"/><text x="740" y="66" text-anchor="middle" class="t">gold tables</text><text x="740" y="82" text-anchor="middle" class="mono">customer · customer_material · condition …</text>
+    <rect x="950" y="44" width="230" height="54" rx="7" class="box gd"/><text x="1065" y="66" text-anchor="middle" class="t">files bucket</text><text x="1065" y="82" text-anchor="middle" class="mono">gs://ingredion-files-prod/cases/…</text>
+
+    <!-- row A: ingress -->
+    <text x="32" y="140" class="lane">api (1–3) · worker (4–5)</text>
+    <rect x="40" y="150" width="200" height="66" rx="7" class="box wr"/><circle cx="56" cy="166" r="9" class="num"/><text x="56" y="170" text-anchor="middle" class="numtext">1</text><text x="76" y="172" class="t">POST /events/…/cases</text><text x="140" y="188" text-anchor="middle" class="lbl">verify OIDC token (audience, SA)</text><text x="140" y="204" text-anchor="middle" class="lbl">503 while the kill switch is on</text>
+    <rect x="280" y="150" width="200" height="66" rx="7" class="box wr"/><circle cx="296" cy="166" r="9" class="num"/><text x="296" y="170" text-anchor="middle" class="numtext">2</text><text x="316" y="172" class="t">raw_from_event → claim</text><text x="380" y="188" text-anchor="middle" class="lbl">IntakeCase → RawCase(id, marker)</text><text x="380" y="204" text-anchor="middle" class="lbl">claims.claim(case_id): once</text>
+    <rect x="520" y="150" width="200" height="66" rx="7" class="box wr"/><circle cx="536" cy="166" r="9" class="num"/><text x="536" y="170" text-anchor="middle" class="numtext">3</text><text x="556" y="172" class="t">dispatcher.submit(item)</text><text x="620" y="188" text-anchor="middle" class="lbl">publish to the work topic → 204</text><text x="620" y="204" text-anchor="middle" class="lbl">(inline on a laptop)</text>
+        <rect x="780" y="150" width="200" height="66" rx="7" class="box wr"/><circle cx="796" cy="166" r="9" class="num"/><text x="796" y="170" text-anchor="middle" class="numtext">4</text><text x="816" y="172" class="t">Worker.handle(delivery)</text><text x="880" y="188" text-anchor="middle" class="lbl">pull · skip if past the gate</text><text x="880" y="204" text-anchor="middle" class="lbl">lease extended every 4 min</text>
+    <rect x="1000" y="150" width="180" height="66" rx="7" class="box wr"/><circle cx="1016" cy="166" r="9" class="num"/><text x="1016" y="170" text-anchor="middle" class="numtext">5</text><text x="1036" y="172" class="t">pipeline.process_raw</text><text x="1090" y="188" text-anchor="middle" class="lbl">Case created, state started</text><text x="1090" y="204" text-anchor="middle" class="lbl">A1 → A2 → A3 → A4 …</text>
+    <line x1="140" y1="98" x2="140" y2="148" class="gdln" marker-end="url(#a2g)"/><text x="148" y="126" class="lbl">push, OIDC-signed</text>
+    <line x1="240" y1="183" x2="278" y2="183" class="ln" marker-end="url(#a2)"/>
+    <line x1="480" y1="183" x2="518" y2="183" class="ln" marker-end="url(#a2)"/>
+    <line x1="720" y1="183" x2="778" y2="183" class="ln" marker-end="url(#a2)"/><text x="749" y="176" text-anchor="middle" class="lbl">Pub/Sub</text>
+    <line x1="980" y1="183" x2="998" y2="183" class="ln" marker-end="url(#a2)"/>
+
+    <!-- row B: the read -->
+    <text x="32" y="256" class="lane">step → connector → factory platform → BigQuery</text>
+    <rect x="40" y="266" width="200" height="78" rx="7" class="box ai"/><circle cx="56" cy="282" r="9" class="num"/><text x="56" y="286" text-anchor="middle" class="numtext">6</text><text x="76" y="288" class="t">A4 validate</text><text x="140" y="304" text-anchor="middle" class="mono">ctx.sap_master.find_partner(</text><text x="140" y="318" text-anchor="middle" class="mono">"sold_to", "Kraft Heinz Foods")</text><text x="140" y="334" text-anchor="middle" class="lbl">the step knows no table</text>
+    <rect x="280" y="266" width="200" height="78" rx="7" class="box sv"/><circle cx="296" cy="282" r="9" class="num"/><text x="296" y="286" text-anchor="middle" class="numtext">7</text><text x="316" y="288" class="t">GoldSAPMasterData</text><text x="380" y="304" text-anchor="middle" class="lbl">builds the Lookup:</text><text x="380" y="318" text-anchor="middle" class="mono">where={"role": "sold_to"}</text><text x="380" y="332" text-anchor="middle" class="mono">within={"name": text}</text>
+    <rect x="520" y="266" width="200" height="78" rx="7" class="box sv"/><circle cx="536" cy="282" r="9" class="num"/><text x="536" y="286" text-anchor="middle" class="numtext">8</text><text x="556" y="288" class="t">GoldReader.guard(table)</text><text x="620" y="304" text-anchor="middle" class="lbl">registry limit: customer ≤ 60 min</text><text x="620" y="318" text-anchor="middle" class="lbl">cached 60 s per table</text><text x="620" y="334" text-anchor="middle" class="lbl">too old or unknown → GoldStale</text>
+    <rect x="760" y="266" width="200" height="78" rx="7" class="box sv"/><circle cx="776" cy="282" r="9" class="num"/><text x="776" y="286" text-anchor="middle" class="numtext">9</text><text x="796" y="288" class="t">BigQueryGoldClient</text><text x="860" y="304" text-anchor="middle" class="lbl">validate() against the registry</text><text x="860" y="318" text-anchor="middle" class="lbl">compile() → SELECT … WHERE … @p0</text><text x="860" y="334" text-anchor="middle" class="lbl">ScalarQueryParameter per value</text>
+    <rect x="1000" y="266" width="180" height="78" rx="7" class="box sv"/><circle cx="1016" cy="282" r="9" class="num"/><text x="1016" y="286" text-anchor="middle" class="numtext">10</text><text x="1036" y="288" class="t">bigquery.Client</text><text x="1090" y="304" text-anchor="middle" class="mono">query(sql, job_config)</text><text x="1090" y="318" text-anchor="middle" class="mono">.result()</text><text x="1090" y="334" text-anchor="middle" class="lbl">rows → list[dict]</text>
+    <line x1="1090" y1="216" x2="1090" y2="240" class="ln thin"/><line x1="1090" y1="240" x2="140" y2="240" class="ln thin"/><line x1="140" y1="240" x2="140" y2="264" class="ln" marker-end="url(#a2)"/>
+    <line x1="240" y1="305" x2="278" y2="305" class="ln" marker-end="url(#a2)"/>
+    <line x1="480" y1="305" x2="518" y2="305" class="ln" marker-end="url(#a2)"/>
+    <line x1="720" y1="305" x2="758" y2="305" class="ln" marker-end="url(#a2)"/>
+    <line x1="960" y1="305" x2="998" y2="305" class="ln" marker-end="url(#a2)"/>
+    <polyline points="620,264 620,254 500,254 500,118 415,118 415,100" class="gdln" marker-end="url(#a2g)"/><text x="508" y="134" class="lbl">ops.freshness: SELECT refreshed_at WHERE table_name = @p0</text>
+    <polyline points="1090,264 1090,254 990,254 990,118 740,118 740,100" class="gdln" marker-end="url(#a2g)"/><text x="982" y="146" text-anchor="end" class="lbl">SELECT * FROM gold_sales.customer WHERE role = @p0 AND STRPOS(…) &gt; 0</text>
+
+    <!-- row C: back to the step, files, write-back -->
+    <text x="32" y="384" class="lane">what comes back, and where it goes</text>
+    <rect x="40" y="394" width="270" height="78" rx="7" class="box ai"/><circle cx="56" cy="410" r="9" class="num"/><text x="56" y="414" text-anchor="middle" class="numtext">11</text><text x="76" y="416" class="t">dict rows → Pydantic models</text><text x="175" y="432" text-anchor="middle" class="mono">[PartnerMatch(role="sold_to",</text><text x="175" y="446" text-anchor="middle" class="mono">id="100123", name="Kraft Heinz Foods")]</text><text x="175" y="462" text-anchor="middle" class="lbl">blocked rows dropped → case.data["validation"]</text>
+    <rect x="330" y="394" width="330" height="78" rx="7" class="box sv"/><circle cx="356" cy="410" r="9" class="num"/><text x="356" y="414" text-anchor="middle" class="numtext">12</text><text x="366" y="416" class="t">files by pointer and hash (A1, B3)</text><text x="495" y="432" text-anchor="middle" class="mono">file_uri → GcsFileStore.get(gs://…)</text><text x="495" y="446" text-anchor="middle" class="mono">download_as_bytes() → sha256 == row.sha256 ?</text><text x="495" y="462" text-anchor="middle" class="lbl">mismatch: IntegrityError · ok: Attachment(bytes)</text>
+    <rect x="690" y="394" width="250" height="78" rx="7" class="box ok"/><circle cx="706" cy="410" r="9" class="num"/><text x="706" y="414" text-anchor="middle" class="numtext">13</text><text x="726" y="416" class="t">evidence bucket</text><text x="815" y="432" text-anchor="middle" class="mono">&lt;case&gt;/&lt;run&gt;/A3/source_text.json</text><text x="815" y="446" text-anchor="middle" class="mono">a3_extract.v1.json · sap_payload.json</text><text x="815" y="462" text-anchor="middle" class="lbl">ctx.keep() · gold refresh times included</text>
+    <rect x="970" y="394" width="210" height="78" rx="7" class="box ok"/><circle cx="986" cy="410" r="9" class="num"/><text x="986" y="414" text-anchor="middle" class="numtext">14</text><text x="1006" y="416" class="t">outcomes dataset</text><text x="1075" y="432" text-anchor="middle" class="mono">agent_a_outcomes.case_outcome</text><text x="1075" y="446" text-anchor="middle" class="mono">insert_rows_json([row])</text><text x="1075" y="462" text-anchor="middle" class="lbl">at returned, duplicate, case updated</text>
+    <line x1="1090" y1="344" x2="1090" y2="368" class="ln thin"/><line x1="1090" y1="368" x2="175" y2="368" class="ln thin"/><line x1="175" y1="368" x2="175" y2="392" class="ln" marker-end="url(#a2)"/>
+    <line x1="495" y1="392" x2="495" y2="368" class="ln thin"/>
+    <line x1="1065" y1="100" x2="1065" y2="126" class="gdln"/><line x1="1065" y1="126" x2="1196" y2="126" class="gdln"/><line x1="1196" y1="126" x2="1196" y2="500" class="gdln"/><line x1="1196" y1="500" x2="495" y2="500" class="gdln"/><line x1="495" y1="500" x2="495" y2="474" class="gdln" marker-end="url(#a2g)"/>
+    <text x="700" y="494" class="lbl">download_as_bytes(gs://ingredion-files-prod/cases/CASE-1/PO_4500123.pdf)</text>
+    <line x1="310" y1="433" x2="328" y2="433" class="ln" marker-end="url(#a2)"/>
+    <line x1="660" y1="433" x2="688" y2="433" class="okln" marker-end="url(#a2k)"/>
+    <line x1="940" y1="433" x2="968" y2="433" class="okln" marker-end="url(#a2k)"/>
+
+    <!-- footer rule -->
+    <rect x="20" y="528" width="1180" height="92" rx="10" class="band"/>
+    <text x="32" y="548" class="lane">What never happens on this picture</text>
+    <text x="32" y="568">· no query touches a bronze or silver table: the registry only knows gold and ops, an unknown table raises before any SQL exists</text>
+    <text x="32" y="584">· no caller string reaches SQL: every value is a query parameter; identifiers come from the registry</text>
+    <text x="32" y="600">· no copy of a gold row or a PO file is kept: the agent stores keys, the evidence it used and its own decisions</text>
+    <text x="32" y="616">· nothing read here is sent to Gemini unscreened: the guard chain sits inside the extractor, after this read, before any model call</text>
+  </svg>
+  </div>
+  <figcaption>Figure 2 · One Order Intake case from the change signal to the partner list in A4, with the file fetch and the write-back. Steps 6 to 11 repeat for every connector call a step makes; the staleness check in step 8 runs at most once a minute per table.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li><strong>The push arrives and is authenticated.</strong><p><code>app/push_auth.require_push_auth</code> takes the bearer token Pub/Sub attached, verifies it with Google's keys against <code>PUBSUB_PUSH_AUDIENCE</code> and checks the email claim equals <code>PUBSUB_PUSH_SERVICE_ACCOUNT</code>. Without an audience (a laptop) the service key stands in. An engaged kill switch answers 503 so Pub/Sub keeps the message and retries later.</p></li>
+  <li><strong>The event becomes a <code>RawCase</code> and the case is claimed.</strong><p><code>intake_from_event(payload)</code> accepts either the gold change signal or a full <code>IntakeCase</code> document and validates it with Pydantic; <code>raw_from_event</code> wraps it as <code>RawCase(source_ref=case_id, marker=gold_refresh_ts, payload=…)</code>. <code>ctx.claims.claim(case_id, owner="order_intake:event")</code> is an atomic insert; a second delivery of the same case gets <code>False</code>, the api records <code>event.duplicate</code> in the audit and answers 204 without running anything.</p></li>
+  <li><strong>The run is handed to the worker.</strong><p><code>WorkItem.from_raw(agent, raw)</code> is serialised as JSON and published to <code>WORK_TOPIC_ORDER_INTAKE</code>. If publishing fails the claim is released and the answer is 503, so the event comes back. On a laptop the <code>InlineDispatcher</code> calls the pipeline inside the request instead.</p></li>
+  <li><strong>The worker pulls and guards the lease.</strong><p><code>Worker.handle</code> acknowledges a redelivery whose case is already at or past the gate (the runtime's <code>restartable_states</code> decide), otherwise it starts a lease thread that calls <code>modify_ack_deadline</code> every 240 seconds and runs the pipeline. A failure before the gate is a nack and a re-run from A1; <code>GoldStale</code> is a nack with a pause.</p></li>
+  <li><strong>The pipeline creates the <code>Case</code>.</strong><p><code>OrderIntakePipeline.process(IntakeCase)</code> builds <code>Case(case_id, agent)</code>, stores the intake record under <code>case.data["intake"]</code>, starts the state machine and runs A1 onwards. Every step receives <code>(case, ctx)</code> and nothing else.</p></li>
+  <li><strong>A step asks a question in its own vocabulary.</strong><p>A4 needs the SAP partners that match the sold-to text the model extracted: <code>ctx.sap_master.find_partner("sold_to", ex.sold_to)</code>. The same line ran yesterday against the stub and will run tomorrow against the data team's real columns; the step is not edited for either.</p></li>
+  <li><strong>The connector expresses the question as a <code>Lookup</code>.</strong>
+<pre>class GoldSAPMasterData(GoldReader):
+    def find_partner(self, role, text):
+        found = {}
+        for column in ("name", "customer_id"):          # the partner's name or id appears inside the PO text
+            for row in self.rows(CUSTOMER, where={"role": role}, within={column: text}):
+                if row.get("blocked"):
+                    continue
+                found.setdefault(str(row["customer_id"]), PartnerMatch(role=role, id=str(row["customer_id"]), name=row.get("name") or ""))
+        return list(found.values())</pre>
+  <p>A <code>Lookup</code> has five kinds of filter and nothing else: <code>where</code> (equality, <code>IN</code> for a list, <code>IS NULL</code> for <code>None</code>), <code>within</code> (the column's value occurs inside a text), <code>between</code> (inclusive bounds, either side open), <code>gt</code> (markers), plus <code>order_by</code> and <code>limit</code>. There is no way to pass SQL.</p></li>
+  <li><strong>The staleness guard runs first.</strong>
+<pre>def guard(self, table):
+    spec = GOLD.table(table)                               # UnknownTable if it is not a gold table the agents read
+    cached = self._checked.get(table)
+    if cached and self._clock() - cached[0] &lt; self.check_every_seconds:   # 60 s
+        return cached[1]
+    fresh = self.client.freshness(table)                   # SELECT … FROM ops.freshness WHERE table_name = @p0
+    self._checked[table] = (self._clock(), fresh)
+    self.refresh_used[table] = fresh.refreshed_at          # kept for the evidence snapshot
+    limit = self.max_age_minutes if self.max_age_minutes is not None else spec.max_age_minutes
+    if limit:
+        age = fresh.age_minutes(self._now())
+        if age is None or age &gt; limit:                     # unknown freshness fails closed
+            raise GoldStale(table, fresh.refreshed_at, limit)
+    return fresh</pre></li>
+  <li><strong>The client validates and compiles.</strong><p><code>Lookup.validate()</code> compares every column named in the lookup with the registry entry for the table and raises <code>UnknownColumn</code> on a miss. <code>compile()</code> then renders one statement: identifiers (project, dataset with its environment suffix, table, columns) come from the registry, every value becomes a named parameter whose BigQuery type is derived from the Python type (<code>str → STRING</code>, <code>int → INT64</code>, <code>float → FLOAT64</code>, <code>bool → BOOL</code>, <code>date → DATE</code>, <code>datetime → TIMESTAMP</code>, a list becomes <code>ARRAY&lt;…&gt;</code> with <code>IN UNNEST</code>).</p></li>
+  <li><strong>BigQuery answers.</strong><p><code>client.query(sql, job_config=QueryJobConfig(query_parameters=[…])).result()</code> is iterated and each row becomes <code>dict(row)</code>. The client is created lazily with <code>bigquery.Client(project=GOLD_PROJECT)</code> under the service's own service account, which has <code>bigquery.dataViewer</code> on the gold datasets and nothing on bronze or silver.</p></li>
+  <li><strong>Rows become the models the steps already use.</strong><p>The connector maps dict keys to the Pydantic model fields and applies the small amount of domain logic that the stub had (blocked partners are dropped, a CMIR key is retried upper-cased, a condition's rate and unit become the tuple A5 expects). The step stores the result exactly where it did before, here <code>Validation.sold_to</code> inside <code>case.data["validation"]</code>.</p></li>
+  <li><strong>Files travel by pointer and are verified.</strong>
+<pre>for att in self.rows(ATTACHMENTS, where={"case_id": case_id}, order_by=("received_at", "name")):
+    content = fetch_verified(self.files, att["file_uri"], att.get("sha256"))   # GcsFileStore → download_as_bytes → sha256 compare
+    attachments.append(Attachment(name=att["name"], content_type=att.get("content_type") or "application/octet-stream", content=content))</pre>
+  <p>A hash mismatch raises <code>IntegrityError</code> and the case fails before any model sees the file. The bytes live only in the running case and, if a step keeps them as evidence, in the agent's own bucket.</p></li>
+  <li><strong>Evidence is written as the case progresses.</strong><p><code>ctx.keep(case, step, name, content)</code> stores an object under <code>&lt;case id&gt;/&lt;run id&gt;/&lt;step&gt;/&lt;name&gt;</code> in <code>EVIDENCE_BUCKET_ORDER_INTAKE</code> and appends the URI to <code>case.data["evidence_uris"]</code>. A3 keeps the layout text per attachment and the raw Gemini answer, A6 the draft answer, A8 the SAP payload, A9 the SAP result; B2 keeps the whole evidence snapshot per version with the gold refresh times. A failed write is logged and alerted, never fatal.</p></li>
+  <li><strong>One outcome row per finished case.</strong><p>At the three terminal points (returned, duplicate closed, case updated) <code>ctx.record_outcome(case)</code> builds the <code>case_outcome</code> row (outcome, reason codes, cohort, PO number, order number, reviewer, decision, confidence, model calls and tokens, evidence URIs, the gold refresh times used, duration) and streams it with <code>insert_rows_json</code>; a correction also writes <code>field_corrections</code> rows. Agent B writes one <code>prebill_outcome</code> row per version in B8.</p></li>
+</ol>
+
+<h3 id="examples">Worked examples: the exact input, the exact SQL, the exact output</h3>
+<div class="two">
+  <div>
+    <h3 style="margin-top:8px">A4 · a sold-to partner</h3>
+    <dl class="kv">
+      <dt>Call</dt><dd><code>ctx.sap_master.find_partner("sold_to", "Sold-to: Kraft Heinz Foods, Chicago")</code></dd>
+      <dt>Lookup</dt><dd><code>Lookup("gold_sales.customer", where={"role": "sold_to"}, within={"name": text})</code>, then the same with <code>within={"customer_id": text}</code></dd>
+      <dt>Guard</dt><dd><code>gold_sales.customer</code>, limit 60 minutes</dd>
+    </dl>
+<pre>SELECT * FROM `ingredion-prod.gold_sales.customer`
+WHERE `role` = @p0
+  AND STRPOS(LOWER(@p1), LOWER(CAST(`name` AS STRING))) &gt; 0
+-- p0 STRING 'sold_to'
+-- p1 STRING 'Sold-to: Kraft Heinz Foods, Chicago'</pre>
+    <dl class="kv">
+      <dt>Rows</dt><dd><code>[{"customer_id": "100123", "role": "sold_to", "name": "Kraft Heinz Foods", "blocked": false, …, "_gold_refresh_ts": "2026-11-03T13:50:02+00:00"}]</code></dd>
+      <dt>Returned</dt><dd><code>[PartnerMatch(role="sold_to", id="100123", name="Kraft Heinz Foods", score=1.0)]</code></dd>
+      <dt>Then</dt><dd>one match → <code>Validation.sold_to</code>; none → exit <code>MASTER.SOLD_TO_NOT_FOUND</code>; several → flag <code>MASTER.PARTNER_AMBIGUOUS</code> with the candidates for the reviewer</dd>
+    </dl>
+  </div>
+  <div>
+    <h3 style="margin-top:8px">B2 · the contract price for the billing date</h3>
+    <dl class="kv">
+      <dt>Call</dt><dd><code>ctx.pros.contract_price("KH-001", "MAT-77001", "2026-08-14")</code></dd>
+      <dt>Lookup</dt><dd><code>Lookup("gold_pricing.pros_agreement", where={"sold_to": "KH-001", "material_id": "MAT-77001"}, between={"valid_from": (None, date(2026, 8, 14)), "valid_to": (date(2026, 8, 14), None)}, order_by=("-valid_from",), limit=1)</code></dd>
+      <dt>Guard</dt><dd><code>gold_pricing.pros_agreement</code>, limit 240 minutes</dd>
+    </dl>
+<pre>SELECT * FROM `ingredion-prod.gold_pricing.pros_agreement`
+WHERE `sold_to` = @p0 AND `material_id` = @p1
+  AND `valid_from` &lt;= @p2 AND `valid_to` &gt;= @p3
+ORDER BY `valid_from` DESC LIMIT 1
+-- p0 STRING 'KH-001'   p1 STRING 'MAT-77001'
+-- p2 DATE 2026-08-14   p3 DATE 2026-08-14</pre>
+    <dl class="kv">
+      <dt>Rows</dt><dd><code>[{"agreement_ref": "PROS-KH-2026-08", "price": 47.0, "price_uom": "CWT", "currency": "USD", "valid_from": "2026-08-01", "valid_to": "2026-08-31", "record": "PROS monthly price Aug 2026 KH-001/MAT-77001", …}]</code></dd>
+      <dt>Returned</dt><dd><code>PriceRecord(price=47.0, price_uom="CWT", currency="USD", source="PROS", record="PROS monthly price Aug 2026 KH-001/MAT-77001", valid_from="2026-08-01", valid_to="2026-08-31")</code></dd>
+      <dt>Then</dt><dd>B2 puts it in <code>ReferenceData.contract_prices[1]</code>; B5's unit-price rule compares it with the PO's 40.14 USD/CWT and the draft invoice's 47.00 and returns <code>PRICE.PO_STALE</code> with verdict <em>Updated PO required</em></dd>
+    </dl>
+  </div>
+</div>
+<div class="two" style="margin-top:18px">
+  <div>
+    <h3 style="margin-top:8px">A1 · the case email with its attachment</h3>
+    <dl class="kv">
+      <dt>Call</dt><dd><code>ctx.salesforce.get_email("5003000000AbCdE")</code></dd>
+      <dt>Lookups</dt><dd><code>email_order_case where case_id = @p0 limit 1</code>, then <code>case_attachment where case_id = @p0 order by received_at, name</code></dd>
+      <dt>Files</dt><dd>per attachment: <code>GcsFileStore.get("gs://ingredion-files-prod/cases/5003000000AbCdE/PO_4500123.pdf")</code> → <code>storage.Client().bucket("ingredion-files-prod").blob("cases/…/PO_4500123.pdf").download_as_bytes()</code> → <code>hashlib.sha256(bytes).hexdigest() == row.sha256</code></dd>
+      <dt>Returned</dt><dd><code>EmailBundle(subject, body, sender, received_at, attachments=[Attachment(name="PO_4500123.pdf", content_type="application/pdf", content=b"%PDF…")])</code></dd>
+      <dt>Then</dt><dd>A2 and A3 run the attachments through the layout reader (Document AI for a PDF) and Gemini behind Model Armor; the layout text is kept as <code>A3/source_text.json</code> in the evidence bucket</dd>
+    </dl>
+  </div>
+  <div>
+    <h3 style="margin-top:8px">A9 · the lookup before any retry</h3>
+    <dl class="kv">
+      <dt>Call</dt><dd><code>ctx.sap_orders.find_by_reference("5003000000ABCDE:4500123", "4500123", "100123")</code></dd>
+      <dt>Lookup</dt><dd><code>Lookup("gold_sales.sales_order", where={"agent_reference": key}, limit=1)</code></dd>
+      <dt>Returned</dt><dd>the <code>order_ref</code> if gold already holds an order carrying the idempotency key; otherwise the question is repeated on the <em>live</em> SAP connector (<code>live.find_by_reference(…)</code>), because right after a timeout gold may not have caught up yet</dd>
+      <dt>Why both</dt><dd>gold is the cheap, always-available answer for the restart case; the live call is the only answer that is current to the second. This is the one read on the picture where a copy is not enough on its own, and the code says so in the method's docstring.</dd>
+    </dl>
+  </div>
+</div>
+
+<h3 id="io">Inputs and outputs per connector method</h3>
+<p>What each method takes from the step, which tables it reads with which filters, and what it hands back. Validity windows mean <code>valid_from ≤ date ≤ valid_to</code>; open-ended rows carry <code>9999-12-31</code> in gold, as in SAP.</p>
+<h3 style="font-size:16px">Agent A · Order Intake</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Method</th><th>Input from the step</th><th>Gold read</th><th>Returned to the step</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td class="k">GoldCaseQueue.fetch / fetch_new</td><td><code>after</code>: last <code>updated_at</code> marker or <code>None</code></td><td><code>email_order_case</code> where <code>routed_to = 'agent'</code> and <code>updated_at &gt; marker</code>, ordered, limit 200</td><td><code>list[RawCase]</code> / <code>list[IntakeCase]</code>: case_id, cohort, customer_name, received_at, case_number</td><td>sweep poller</td></tr>
+    <tr><td class="k">GoldSalesforceCases.get_email</td><td><code>case_id</code></td><td><code>email_order_case</code> by key; <code>case_attachment</code> by case; each <code>file_uri</code> fetched and hash-checked</td><td><code>EmailBundle</code> with <code>Attachment</code> bytes; <code>KeyError</code> if no such case; <code>IntegrityError</code> on a hash mismatch</td><td>A1 (then A2, A3 through the layout reader)</td></tr>
+    <tr><td class="k">GoldSAPMasterData.find_partner</td><td><code>role</code>, the free text the model extracted</td><td><code>customer</code> where <code>role = ?</code> and the name, then the id, occurs within the text; blocked rows dropped</td><td><code>list[PartnerMatch]</code> (id, name, score 1.0)</td><td>A4 sold-to, ship-to, bill-to</td></tr>
+    <tr><td class="k">GoldSAPMasterData.cmir</td><td><code>sold_to</code>, <code>customer_material</code></td><td><code>customer_material</code> where both keys match (retried upper-cased)</td><td><code>list[CMIRMatch]</code> (customer_material, sap_material, description, sales_uom)</td><td>A4 per line; several matches → reviewer chooses</td></tr>
+    <tr><td class="k">GoldSAPMasterData.uom_conversion</td><td><code>sap_material</code>, <code>from_uom</code></td><td><code>material_uom</code> where material and uom; else the material's base uom plus <code>gold_reference.uom_conversion</code></td><td><code>UomConversion(from_uom, to_uom, factor)</code> or <code>None</code></td><td>A4 quantity conversion (1,700 CWT → 170,000 LB)</td></tr>
+    <tr><td class="k">GoldSAPMasterData.allowed_uoms</td><td><code>sap_material</code></td><td><code>material_uom</code> where material</td><td>sorted <code>list[str]</code> of units including the base</td><td>A4 to tell <code>UOM.INVALID</code> from <code>UOM.NO_CONVERSION</code></td></tr>
+    <tr><td class="k">GoldSAPOrders.find_duplicates</td><td>sold_to, ship_to, po_number, materials, date, quantities, window_days</td><td><code>sales_order</code> where sold_to and <code>order_date ≥ today − window</code>; <code>sales_order_item</code> for those orders and materials in one <code>IN UNNEST</code> query</td><td><code>list[DuplicateCandidate]</code>: same PO scores 1.0, same lines 0.8</td><td>A5 → <code>DUP.POSSIBLE</code> for the reviewer</td></tr>
+    <tr><td class="k">GoldSAPOrders.find_by_reference</td><td>idempotency key, po_number, sold_to</td><td><code>sales_order</code> where <code>agent_reference = key</code>; then the live connector</td><td><code>order_ref</code> or <code>None</code></td><td>A9 before the first attempt and after every timeout; restart reconciliation</td></tr>
+    <tr><td class="k">GoldSAPOrders.price</td><td>sold_to, sap_material, requested date</td><td><code>condition</code> where keys and validity window, newest first, limit 1</td><td><code>(rate, price_uom, "SAP condition A005 …")</code> or <code>None</code></td><td>A5 price check → <code>PRICE.PO_VS_SAP</code></td></tr>
+    <tr><td class="k">GoldSAPOrders.contract</td><td>sold_to, sap_material, requested date</td><td><code>contract</code> where keys and validity window</td><td>dict: number, valid_to, remaining_quantity, quantity_uom, price, currency; or <code>None</code></td><td>A5 → <code>CONTRACT.NONE</code> / <code>CONTRACT.OUTSIDE_TERMS</code></td></tr>
+    <tr><td class="k">GoldSAPOrders.availability</td><td>sap_material, quantity, uom, date</td><td>none: delegated to the live connector, <code>None</code> without one</td><td>dict with <code>available</code>, or <code>None</code> (check reported as not done)</td><td>A5 → <code>ATP.SHORT</code></td></tr>
+  </tbody>
+</table></div>
+<h3 style="font-size:16px">Agent B · Pre-bill Validation</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Method</th><th>Input from the step</th><th>Gold read</th><th>Returned to the step</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td class="k">GoldSAPBilling.fetch / list_ready</td><td><code>after</code>: last <code>ready_at</code> marker</td><td><code>invoice_ready_order</code> where <code>ready_at &gt; marker</code>, ordered, limit 200</td><td><code>list[RawCase]</code> / <code>list[DraftInvoiceRef]</code> (order_ref, invoice_ref, sold_to, customer_name, billing_date, po_ref)</td><td>sweep poller; B1</td></tr>
+    <tr><td class="k">GoldSAPBilling.draft_invoice</td><td><code>DraftInvoiceRef</code></td><td><code>billing_document</code> where invoice_ref, by line; item rows become lines, charge rows become charges</td><td><code>CanonicalDoc(doc_type=INVOICE, source="sap", currency, payment_terms_days, lines, charges, evidence)</code></td><td>B2; B4 normalises it</td></tr>
+    <tr><td class="k">GoldSAPBilling.shipment</td><td><code>DraftInvoiceRef</code></td><td><code>delivery</code> where order_ref</td><td>dict: ship_date, shipped_qty (summed), uom, deliveries; or <code>None</code></td><td>B2 → quantity rule</td></tr>
+    <tr><td class="k">GoldSAPBilling.price_condition</td><td>sold_to, material, billing date</td><td><code>condition</code> where keys and validity window</td><td><code>PriceRecord(source="SAP condition")</code> or <code>None</code></td><td>B2, second choice after PROS</td></tr>
+    <tr><td class="k">GoldSAPBilling.payment_terms</td><td>sold_to</td><td><code>customer</code> where customer_id and role sold_to</td><td><code>(days, "customer master KH-001 N110")</code> or <code>None</code></td><td>B2, second choice after the PROS terms</td></tr>
+    <tr><td class="k">GoldPROS.contract_price</td><td>sold_to, material, billing date</td><td><code>pros_agreement</code> where keys and validity window, newest first</td><td><code>PriceRecord(source="PROS")</code> or <code>None</code></td><td>B2 → unit-price rule</td></tr>
+    <tr><td class="k">GoldPROS.contract_terms</td><td>sold_to, billing date</td><td><code>pros_agreement</code> where sold_to, <code>material_id IS NULL</code>, validity window</td><td><code>(days, record)</code> or <code>None</code></td><td>B2 → payment-terms rule</td></tr>
+    <tr><td class="k">GoldSalesforceOrders.order</td><td>order_ref</td><td><code>sales_order</code> by key; <code>captured_po_json</code> parsed when present</td><td>dict: po_ref, po_source, sold_to, salesforce_case_id, optional <code>captured_po: CanonicalDoc</code>; or <code>None</code></td><td>B2, B3 (tier 2 of the PO search)</td></tr>
+    <tr><td class="k">GoldAriba.purchase_order</td><td>po_ref</td><td><code>ariba_po</code> where po_ref, by line</td><td><code>CanonicalDoc(doc_type=PO, source="ariba", …)</code> or <code>None</code></td><td>B3 tier 1</td></tr>
+    <tr><td class="k">FilesBucketMailbox.find_po_pdf</td><td>order_ref, po_ref</td><td><code>case_attachment</code> where kind po and order_ref, else po_ref, newest first; file fetched and hash-checked</td><td><code>(bytes, content_type)</code> or <code>None</code></td><td>B3 tier 3, then Document AI and Gemini</td></tr>
+    <tr><td class="k">GoldTermSync.dispute_history</td><td>sold_to</td><td><code>dispute</code> where sold_to, newest first, limit 50</td><td>list of dicts: invoice, code, date, amount, status</td><td>B2 context; B6 explanation</td></tr>
+    <tr><td class="k">GoldRateFiles.freight_terms / surcharge_terms</td><td>sold_to, billing date</td><td><code>freight_charge</code> / <code>fuel_rate</code> where sold_to and validity window</td><td><code>ChargeTerms(applies, amount, basis, source, record)</code> or <code>None</code></td><td>B5 freight and fuel-surcharge rules</td></tr>
+    <tr><td class="k">GoldRateFiles.material_factors</td><td>material</td><td><code>material_uom</code> where material, rows with <code>lb_per_unit</code></td><td>dict <code>{"BAG": 50.0, …}</code></td><td>B4 unit normalisation</td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="stale">The staleness guard</h3>
+<p>A gold table is a copy. The guard turns "how old may the copy be before we must not validate against it?" into one number per table, kept in the registry next to the columns. The check costs one small query per table per minute per process, and the answer is remembered on the reader so the evidence can say which refresh every decision was based on.</p>
+<figure>
+  <div class="scroll">
+  <svg class="dg" viewBox="0 0 1220 232" role="img" aria-label="Timeline of the staleness guard: a table refreshed within its limit serves rows and its refresh time is kept for the evidence; a table refreshed too long ago or with unknown freshness raises GoldStale, which the worker turns into a nack with a pause and the poller into a released claim.">
+    <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker></defs>
+    <line x1="60" y1="70" x2="1160" y2="70" class="ln" marker-end="url(#a3)"/>
+    <text x="1164" y="56" text-anchor="end" class="lbl">time</text>
+    <rect x="520" y="52" width="400" height="36" rx="6" class="ok bandfill"/>
+    <text x="720" y="46" text-anchor="middle" class="lbl">inside the limit (customer: 60 min · condition: 240 min · cases: 15 min)</text>
+    <line x1="520" y1="40" x2="520" y2="100" class="ln thin"/><text x="520" y="114" text-anchor="middle" class="t">refreshed_at</text><text x="520" y="128" text-anchor="middle" class="lbl">from ops.freshness</text>
+    <line x1="920" y1="40" x2="920" y2="100" class="ln thin"/><text x="920" y="114" text-anchor="middle" class="t">refreshed_at + limit</text>
+    <circle cx="760" cy="70" r="6" class="ok"/><text x="760" y="114" text-anchor="middle" class="t">now (fresh)</text><text x="760" y="128" text-anchor="middle" class="lbl">rows served · refresh_used[table] = refreshed_at</text>
+    <circle cx="1060" cy="70" r="6" class="exit"/><text x="1060" y="114" text-anchor="middle" class="t">now (stale)</text><text x="1060" y="128" text-anchor="middle" class="lbl">GoldStale(table, refreshed_at, limit)</text>
+    <circle cx="200" cy="70" r="6" class="exit"/><text x="200" y="114" text-anchor="middle" class="t">no row in ops.freshness</text><text x="200" y="128" text-anchor="middle" class="lbl">unknown freshness fails closed: GoldStale</text>
+    <rect x="60" y="160" width="340" height="56" rx="7" class="box"/><text x="230" y="182" text-anchor="middle" class="t">worker</text><text x="230" y="198" text-anchor="middle" class="lbl">audit gold.stale · nack · redelivered after 120 s · claim kept</text>
+    <rect x="440" y="160" width="340" height="56" rx="7" class="box"/><text x="610" y="182" text-anchor="middle" class="t">sweep poller</text><text x="610" y="198" text-anchor="middle" class="lbl">report.failed +1 · claim released · the next sweep takes it again</text>
+    <rect x="820" y="160" width="340" height="56" rx="7" class="box"/><text x="990" y="182" text-anchor="middle" class="t">the case itself</text><text x="990" y="198" text-anchor="middle" class="lbl">nothing decided, nothing written: a platform delay is not a case defect</text>
+  </svg>
+  </div>
+  <figcaption>Figure 3 · What a stale table does to a run. The limit is per table in the registry; <code>GOLD_MAX_AGE_MINUTES</code> overrides all of them in an environment, and <code>0</code> switches the guard off for a test.</figcaption>
+</figure>
+<div class="tbl"><table>
+  <thead><tr><th>Registry limit</th><th>Tables</th><th>Reasoning</th></tr></thead>
+  <tbody>
+    <tr><td class="k">15 min</td><td><code>gold_cases.email_order_case</code>, <code>case_attachment</code></td><td>Near real time through Acersoft; an agent must not pick up a case the data team's pipeline has not fully landed.</td></tr>
+    <tr><td class="k">30 min</td><td><code>sales_order</code>, <code>sales_order_item</code>, <code>delivery</code>, <code>invoice_ready_order</code>, <code>billing_document</code></td><td>Transactional SAP data: duplicates, shipments and draft invoices change through the day.</td></tr>
+    <tr><td class="k">60 min</td><td><code>customer</code>, <code>material</code>, <code>material_uom</code>, <code>customer_material</code>, <code>ariba_po</code></td><td>Master data and portal POs move slowly, but a new CMIR record the same morning should be seen.</td></tr>
+    <tr><td class="k">240 min</td><td><code>condition</code>, <code>contract</code>, <code>pros_agreement</code>, <code>dispute</code></td><td>Daily or intraday loads; a price valid today was loaded before the day started.</td></tr>
+    <tr><td class="k">1440 min</td><td><code>freight_charge</code>, <code>fuel_rate</code>, <code>uom_conversion</code>, <code>contract_document</code></td><td>Schedules and reference data refreshed daily at most.</td></tr>
+  </tbody>
+</table></div>
+<p class="note">These limits are Parkar's proposal from the data-team input of 26 October 2026 and are the first thing to agree once the data team states each table's actual refresh cadence.</p>
+
+<h3 id="back">What is written back, and what is not</h3>
+<div class="two">
+  <div>
+    <p><strong>Evidence bucket</strong> (<code>EVIDENCE_BUCKET_&lt;AGENT&gt;</code>, class <code>GcsEvidenceStore</code>): <code>blob.upload_from_string(bytes, content_type)</code> under <code>&lt;case&gt;/&lt;run&gt;/&lt;step&gt;/&lt;name&gt;</code>. A pre-bill recheck is a new run id, so every version keeps its own snapshot.</p>
+    <ul class="tight">
+      <li><code>A2/a2_classify.v2.json</code>, <code>A3/a3_extract.v1.json</code>, <code>A6/a6_exceptions.v1.json</code>, <code>B3/b3_read_po.v1.json</code>, <code>B6/b6_explain.v1.json</code>: prompt reference and hash, model, tokens, latency, guard verdicts, the raw answer and the parsed data</li>
+      <li><code>A3/source_text.json</code>: the layout text per attachment, which reader produced it, pages, mean token confidence</li>
+      <li><code>A8/sap_payload.json</code>, <code>A9/sap_order.json</code>: what went to SAP and what came back, with the idempotency key</li>
+      <li><code>B2/evidence_v&lt;n&gt;.json</code>: draft invoice, sales order, reference data (prices, terms, charges, shipment, disputes, what was missing) and the gold refresh times used; <code>B3/po_&lt;source&gt;.json</code></li>
+    </ul>
+  </div>
+  <div>
+    <p><strong>Outcomes dataset</strong> (<code>OUTCOMES_DATASET_&lt;AGENT&gt;</code>, class <code>BigQueryOutcomeSink</code>): <code>insert_rows_json("&lt;project&gt;.&lt;dataset&gt;.&lt;table&gt;", [row])</code>; lists of scalars become repeated columns, nested structures travel as JSON strings.</p>
+    <ul class="tight">
+      <li><code>agent_a_outcomes.case_outcome</code>: case_id, run_id, outcome, state, reason_codes, flags, source, cohort, customer, mode, intent, po_number, sold_to, ship_to, lines, order_number, reconciled, sap_attempts, reviewer, decision_kind, confirmed_duplicate, corrections, confidence, low_confidence_fields, duplicates_found, model_calls, tokens_total, evidence_uris, gold_refresh, duration_ms, recorded_at</li>
+      <li><code>agent_a_outcomes.field_corrections</code>: one row per corrected field</li>
+      <li><code>agent_b_outcomes.prebill_outcome</code>: version, order_ref, invoice_ref, sold_to, customer, billing_date, po_ref, po_source, checks, failed_checks, verdicts, gaps, issue_owners, reviewer, decision_kind, decision_reason, missing, traceable, model_calls, tokens_total, evidence_uris, gold_refresh, time_to_decision_ms, duration_ms</li>
+    </ul>
+    <p><strong>Never written:</strong> any gold table, bronze, silver, the landing bucket, the files bucket. The agents' service accounts hold no write role there.</p>
+  </div>
+</div>
+
+<h3 id="tests">The in-memory twin and the contract tests</h3>
+<p><code>InMemoryGoldClient</code> implements the same two methods as the BigQuery client, <code>rows(Lookup)</code> and <code>freshness(table)</code>, over lists of dicts keyed by the registry's table names, and applies every filter kind in Python. Because the connectors only ever speak <code>Lookup</code>, the identical connector classes run in the tests, on a laptop and in the project. The tests that pin the contract:</p>
+<ul class="tight">
+  <li><code>tests/platform/test_gold_platform.py</code>: the registry's shape, every filter kind on the in-memory client, the exact SQL and parameter types the BigQuery client renders for a representative lookup, the freshness query, the staleness guard's cache and fail-closed behaviour, files by hash.</li>
+  <li><code>tests/order_intake/test_oi_gold_readers.py</code>: the Order Intake test world written as gold rows; the full pipeline through the gate to a created order on the gold connectors; a previous order in gold detected as a duplicate; the master-data lookups against the stub semantics; a stale table releasing the claim through the poller; a tampered attachment refused.</li>
+  <li><code>tests/prebill/test_prebill_gold_readers.py</code>: the Kraft Heinz anchor as gold rows caught four of four with the same verdicts, owners and evidence; the invoice-ready table as an intake source; the PO PDF fallback from the files bucket; the rate files and dispute history from landing-bucket CSVs.</li>
+  <li><code>tests/platform/test_evidence_outcomes.py</code>: what both pipelines leave in the evidence store and the outcome sink, including one row per pre-bill version and the rule that a broken bucket never fails a case.</li>
+</ul>
+<div class="callout ai">
+  <p><strong>When the data team's DDL arrives.</strong> Change the table's entry in <code>factory/platform/schema.py</code> (columns, keys, limit), run the suite: any connector that names a column that no longer exists fails at <code>Lookup.validate()</code> in the in-memory tests before a single query reaches BigQuery; fix the mapping in the connector; done. The steps do not change. A new table the agents need is added to the registry first, then to a connector, then to a contract test with a few rows.</p>
+</div>
+
+<h3 id="config">Configuration that drives this flow</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Variable</th><th>Read by</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td class="k">INGREDION_PLATFORM</td><td>both runtimes</td><td><code>stub</code> (default): in-memory Dev systems. <code>gold</code>: <code>BigQueryGoldClient</code> plus <code>GcsFileStore</code> behind every read protocol.</td></tr>
+    <tr><td class="k">GOLD_PROJECT, GOLD_DATASET_SUFFIX</td><td>BigQueryGoldClient</td><td>Where the gold datasets live (defaults to the agent project) and the data team's per-environment suffix, so <code>gold_sales</code> becomes <code>gold_sales_dev</code> in Dev. Also used for <code>ops.freshness</code>.</td></tr>
+    <tr><td class="k">GOLD_MAX_AGE_MINUTES</td><td>GoldReader</td><td>Global override of the per-table limits; unset keeps the registry values.</td></tr>
+    <tr><td class="k">FILES_BUCKET</td><td>documentation only</td><td>The <code>gs://</code> URIs on the gold rows name the bucket; the client needs no setting, only <code>storage.objectViewer</code> on it.</td></tr>
+    <tr><td class="k">EXTRACT_BUCKET / EXTRACT_DIR</td><td>prebill runtime</td><td>When set, rate files and TermSync come from CSV extracts (<code>freight_terms/</code>, <code>fuel_surcharge/</code>, <code>material_factors/</code>, <code>disputes/</code>, newest file wins) whatever the platform.</td></tr>
+    <tr><td class="k">EVIDENCE_BUCKET_&lt;AGENT&gt;, OUTCOMES_DATASET_&lt;AGENT&gt;</td><td>both runtimes</td><td>Where the write-back goes; unset keeps it in memory.</td></tr>
+    <tr><td class="k">WORK_TOPIC_&lt;AGENT&gt;, WORK_SUBSCRIPTION_&lt;AGENT&gt;</td><td>api, worker</td><td>The hop between steps 3 and 4 of Figure 2; unset runs cases inline.</td></tr>
+    <tr><td class="k">PUBSUB_PUSH_AUDIENCE, PUBSUB_PUSH_SERVICE_ACCOUNT</td><td>api</td><td>Step 1 of Figure 2; unset lets the service key in (Dev only).</td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="limits">Limits and open points</h3>
+<ul class="tight">
+  <li><strong>Two reads are not copies.</strong> Availability (ATP) and the order lookup immediately after a SAP timeout need the live SAP connector; the gold connector delegates to it and reports "not checked" without one. The live connector is part of the Gate 2 write-path decision.</li>
+  <li><strong>The registry is a proposal.</strong> Twenty gold tables plus <code>ops.freshness</code>, named and typed from the 26 October input. Column names, the open-ended validity convention and the refresh cadence per table are the data team's to confirm; the contract tests make each change visible.</li>
+  <li><strong>Validity windows assume DATE columns and 9999-12-31 open ends.</strong> The client sends <code>date</code> parameters as <code>DATE</code>; a <code>NULL valid_to</code> would exclude the row. If the data team keeps nulls, the window becomes <code>(valid_to IS NULL OR valid_to ≥ @p)</code> in <code>compile()</code>.</li>
+  <li><strong>Partner matching is a substring test.</strong> <code>find_partner</code> asks whether the customer's name or id occurs in the extracted text, which is what the stub did and what the Stage 1 backtest will measure. A search-name table or a fuzzy match is a Stage 1 finding if the backtest needs it.</li>
+  <li><strong>Streaming inserts</strong> into the outcome tables are simple and immediate but carry BigQuery's streaming quotas; at the expected volumes they are far from a limit. Load jobs are the fallback.</li>
+  <li><strong>Synchronous pull</strong> in the worker (a <code>pull</code> request every 30 seconds with up to four messages) suits the case volume and keeps the lease logic explicit; streaming pull is a drop-in change inside <code>PubSubWorkQueue</code> if latency ever matters.</li>
+  <li><strong>The pre-bill case store</strong> is still in memory in the worker; a Mongo store like Agent A's is needed before a recheck can arrive in a different process than the first run.</li>
+</ul>
+
+<footer>
+  Parkar delivery team · 30 October 2026 · Source of truth: <code>Ingredion/factory/platform/</code>, <code>order_intake_agent/connectors/gold.py</code>, <code>prebill_agent/connectors/gold.py</code>, <code>app/</code> · Companion pages: Agent Workflows, Data Architecture · Nothing on this page is a commitment to Ingredion; the gold contract is agreed with the data team in Stage 1.
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,949 @@
+<title>Ingredion Agent Workflows</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* One reading column for prose and tables; each diagram sits in its own horizontal scroller and is the only element allowed to be wider. */
+  :root {
+    --bg: #F5F7FA; --fg: #1B232D; --muted: #5C6774; --line: #D2D9E2; --surface: #FFFFFF; --band: #EBEFF4;
+    --ai: #A3650C; --ai-fill: #FBF0DC; --ok: #2B7A58; --ok-fill: #E4F3EC; --code-bg: #EDF0F4;
+    --wr: #2F5BD8; --wr-fill: #E6ECFB; --exit: #B3261E; --exit-fill: #FBE8E6;
+    --display: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131920; --fg: #E5EAF1; --muted: #9AA7B6; --line: #2C3742; --surface: #1B232D; --band: #19212A;
+      --ai: #E2A84F; --ai-fill: #3B2D14; --ok: #5FC08F; --ok-fill: #17392A; --code-bg: #1E2731;
+      --wr: #8EA6F7; --wr-fill: #1C2A4D; --exit: #F08C84; --exit-fill: #47201D; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131920; --fg: #E5EAF1; --muted: #9AA7B6; --line: #2C3742; --surface: #1B232D; --band: #19212A;
+    --ai: #E2A84F; --ai-fill: #3B2D14; --ok: #5FC08F; --ok-fill: #17392A; --code-bg: #1E2731;
+    --wr: #8EA6F7; --wr-fill: #1C2A4D; --exit: #F08C84; --exit-fill: #47201D; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; }
+  header h1 { font-family: var(--display); font-weight: 600; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 0 0 8px; text-wrap: balance; }
+  header p.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); margin-top: 14px; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 48px 0 10px; text-wrap: balance; }
+  h2 .uc { display: inline-block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-right: 10px; vertical-align: middle; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 26px 0 8px; }
+  p { max-width: 72ch; }
+  .verdict { display: grid; grid-template-columns: auto 1fr; gap: 14px 18px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-top: 22px; }
+  .verdict .pill { background: var(--ok-fill); color: var(--ok); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
+  .verdict .pill.amber { background: var(--ai-fill); color: var(--ai); }
+  .verdict p { margin: 0; }
+  .verdict ol { margin: 10px 0 0; padding-left: 20px; }
+  .verdict li { margin: 5px 0; }
+  @media (max-width: 560px) { .verdict { grid-template-columns: 1fr; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 22px; height: 12px; border: 1.5px solid currentColor; border-radius: 3px; background: var(--surface); color: var(--fg); }
+  .legend i.ai { background: var(--ai-fill); border-color: var(--ai); }
+  .legend i.wr { background: var(--wr-fill); border-color: var(--wr); }
+  .legend i.exit { background: var(--exit-fill); border-color: var(--exit); }
+  .legend i.human { border-style: dashed; }
+  .legend i.opt { border-style: dotted; }
+  .legend i.audit { background: var(--band); border-color: var(--line); }
+  figure { margin: 0; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .dg { display: block; width: 1220px; max-width: none; height: auto; }
+  @media (min-width: 1200px) { .dg { width: 100%; } }
+  figcaption { font-size: 13.5px; color: var(--muted); margin-top: 10px; max-width: 80ch; }
+  .dg text { font-family: var(--body); font-size: 11px; fill: currentColor; }
+  .dg .t { font-size: 12px; font-weight: 600; }
+  .dg .lane { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; fill: var(--muted); }
+  .dg .lbl { fill: var(--muted); }
+  .dg .band { fill: var(--band); stroke: none; }
+  .dg .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .dg .ai { fill: var(--ai-fill); stroke: var(--ai); }
+  .dg .wr { fill: var(--wr-fill); stroke: var(--wr); }
+  .dg .exit { fill: var(--exit-fill); stroke: var(--exit); }
+  .dg .aig { fill: none; stroke: var(--ai); stroke-width: 1.2; stroke-dasharray: 2 3; }
+  .dg .wrg { fill: none; stroke: var(--wr); stroke-width: 1.2; stroke-dasharray: 2 3; }
+  .dg .human { stroke-dasharray: 6 4; }
+  .dg .opt { stroke-dasharray: 2 3; }
+  .dg .chip { fill: var(--surface); stroke: currentColor; stroke-width: 1; }
+  .dg .chip.ok { fill: var(--ok-fill); stroke: var(--ok); }
+  .dg .ln { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .dg .ln.thin { stroke-width: 1; }
+  .dg .ailn { fill: none; stroke: var(--ai); stroke-width: 1.3; }
+  .dg .wrln { fill: none; stroke: var(--wr); stroke-width: 1.3; }
+  .dg .exln { fill: none; stroke: var(--exit); stroke-width: 1.3; }
+  .dg .arrow { marker-end: url(#arw); }
+  .dg .mk { fill: currentColor; }
+  .dg .mk-ai { fill: var(--ai); }
+  .dg .mk-wr { fill: var(--wr); }
+  .dg .mk-ex { fill: var(--exit); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .02em; color: var(--muted); }
+  td.k { font-weight: 600; white-space: nowrap; }
+  td.kw { font-weight: 600; }
+  .tbl { overflow-x: auto; }
+  .tbl table { min-width: 640px; }
+  .yes { color: var(--ok); font-weight: 600; white-space: nowrap; }
+  .cond { color: var(--ai); font-weight: 600; white-space: nowrap; }
+  .flag { color: var(--exit); font-weight: 600; white-space: nowrap; }
+  .tbc { font-family: var(--mono); font-size: 11.5px; color: var(--ai); white-space: nowrap; }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 0.92em; }
+  ul.tight, ol.tight { margin: 8px 0; padding-left: 20px; }
+  ul.tight li, ol.tight li { margin: 4px 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+  .note { font-size: 13.5px; color: var(--muted); }
+  .sub { color: var(--muted); font-size: 14px; margin-top: -4px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Ingredion Agent Workflows</h1>
+  <p class="lede">Two agents under the Ingredion Agentic AI Factory, drawn step by step from the SOW documents and Ingredion's <strong>redline v2 of 20 October 2026</strong>: the <strong>Email Order Intake Agent</strong> (Agent A), now the primary processor for every email-order case Salesforce routes to it, cohort by cohort, and the <strong>Pre-bill Validation and Dispute Prevention Agent</strong> (Agent B). Both run inside the Ingredion Google Cloud project with Gemini on Vertex AI; Google Cloud services are confirmed in Stage 2.</p>
+  <div class="meta"><span>Revised 21 October 2026</span><span>Agent A: all email orders from Salesforce, cohort by cohort · Existing RPA as transition fallback</span><span>Agent B: invoice-ready → invoice-sent · writes nothing</span><span>Thresholds, owners and dates are proposed until each SOW's Gate 1</span></div>
+</header>
+
+<section class="verdict" aria-label="What changed on 21 October">
+  <span class="pill amber">Revision of 21 Oct</span>
+  <div>
+    <p>Ingredion's redline v2 changes the platform and the scope of Agent A; the factory split and the eight pre-bill steps stand. What is different from the 19 October page:</p>
+    <ol>
+      <li><strong>Google Cloud, not Azure.</strong> Both agents run on Cloud Run in the Ingredion Google Cloud project (Dev, Test, Prod). The model is an approved Gemini endpoint on Vertex AI; Document AI reads scanned POs; Model Armor screens email and PO text before every model call; Cloud Storage lands scheduled extracts; Cloud Trace, Cloud Logging and Cloud Monitoring carry observability; one dedicated service account, least-privilege IAM and Secret Manager carry access. Services follow the redline and are confirmed in Stage 2.</li>
+      <li><strong>Agent A processes all email orders, cohort by cohort.</strong> It is no longer a fallback for RPA failures: Ingredion routes each customer cohort to the agent in the Salesforce case queue, the Existing RPA keeps the cohorts not yet moved and stays as fallback until Ingredion retires it, and every exit goes to the manual queue (Customer Service) with the agent's reason on the original case.</li>
+      <li><strong>Ten steps, generative AI in three.</strong> A6 (exceptions) drafts the customer clarification with Gemini and saves it as an Outlook draft through Microsoft Graph for the reviewer to send; A7 builds the review summary; A9 creates the order through the SAP order API or BAPI via APIM (method approved at Gate 2) and then reads the SAP incompletion log; A10 writes the order number, status, audit note and incompletion follow-ups to the case.</li>
+      <li><strong>No mapping database.</strong> A4 maps directly to SAP fields (customer, ship-to, bill-to, material, CMIR, UOM). Where validation runs (SAP or Google Cloud) is recommended in Stage 1 and decided at Gate 1.</li>
+      <li><strong>Every case stops at the reviewer in Phase 1.</strong> Cohort-by-cohort rollout is what keeps that workable; Phase 2 (high-confidence cases skip the gate) is an Ingredion decision at Gate 5.</li>
+      <li><strong>Agent B: four checks in the first release</strong> (price; freight and surcharge; quantity; payment terms), outcomes Matched · Updated PO required · Fix our side or decide, and an owner per outcome (Customer Service or Commercial; the Ingredion owner, with price changes sitting with CBA, Sales and PROS). The Kraft Heinz anchor must be caught 4 of 4.</li>
+      <li><strong>Code realigned on 21 October.</strong> Vertex AI, Document AI and Model Armor adapters behind the existing factory interfaces; the Order Intake pipeline rebuilt as A1 to A10 with a primary mode and a fallback mode; 82 tests on stubs and a fake model.</li>
+    </ol>
+  </div>
+</section>
+
+<h2>One factory, two agents, one Google Cloud project</h2>
+<p class="sub">What is shared, what is specific, and where the only writes to Ingredion systems happen.</p>
+<div class="legend" aria-hidden="true">
+  <span><i></i> use-case code / shared runtime</span>
+  <span><i class="ai"></i> generative AI on Vertex AI</span>
+  <span><i class="wr"></i> writes to an Ingredion system</span>
+  <span><i class="opt"></i> later connection</span>
+  <span><i class="audit"></i> layer</span>
+</div>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 590" role="img" aria-label="Three layers inside the Ingredion Google Cloud project. Top: two agent pipelines, Email Order Intake A1 to A10 and Pre-bill Validation B1 to B8. Middle: the shared factory runtime of eight Google Cloud native components, built once and used by both. Bottom: Ingredion systems read through one dedicated service account by both agents; only the Order Intake agent writes, to the SAP order API, the Salesforce case and an Outlook draft, after a reviewer approves. A dotted link shows price discrepancies flagged by Order Intake feeding pre-bill evidence later.">
+  <defs>
+    <marker id="f-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="f-arw-wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-wr" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <rect class="band" x="36" y="24" width="1148" height="128" rx="8"/>
+  <rect class="band" x="36" y="184" width="1148" height="180" rx="8"/>
+  <rect class="band" x="36" y="396" width="1148" height="160" rx="8"/>
+  <text class="lane" x="48" y="16">Agent pipelines · use-case code on Cloud Run, one module per step</text>
+  <text class="lane" x="48" y="176">Shared factory runtime · Google Cloud native, built once in Agent A, reused by Agent B</text>
+  <text class="lane" x="48" y="388">Ingredion systems · existing, not changed by Parkar</text>
+
+  <!-- pipelines -->
+  <rect class="box" x="60" y="44" width="540" height="92" rx="6"/>
+  <text x="72" y="64" class="t">Agent A · Email Order Intake Agent · A1 to A10</text>
+  <text x="72" y="80">Primary for every email-order case Salesforce routes to it, cohort by cohort.</text>
+  <text x="72" y="95">Gemini in A2 (classify), A3 (extract) and A6 (exceptions). Every case stops at a reviewer.</text>
+  <text x="72" y="110" style="fill: var(--wr); font-weight: 600;">Writes after approval: SAP order (A9), Salesforce case (A10); Outlook draft via Graph (A6).</text>
+  <text x="72" y="125" class="lbl">Existing RPA keeps unmoved cohorts and stays as fallback until Ingredion retires it.</text>
+
+  <rect class="box" x="620" y="44" width="540" height="92" rx="6"/>
+  <text x="632" y="64" class="t">Agent B · Pre-bill Validation and Dispute Prevention Agent · B1 to B8</text>
+  <text x="632" y="80">Between invoice-ready and invoice-sent: six sources in one schema, four checks.</text>
+  <text x="632" y="95">Gemini in B3 (PDF PO read, fallback) and B6 (explain and draft) only. Owner confirms flags.</text>
+  <text x="632" y="110" style="fill: var(--ok); font-weight: 600;">Writes nothing: review queue, drafted request and audit record are the only outputs.</text>
+  <text x="632" y="125" class="lbl">First release: all four checks; Kraft Heinz 809-6862 caught 4 of 4.</text>
+
+  <path class="ln" d="M330 136 V184" marker-end="url(#f-arw)"/>
+  <text x="338" y="150" class="lbl">A-steps call the runtime</text>
+  <path class="ln" d="M890 136 V184" marker-end="url(#f-arw)"/>
+  <text x="898" y="150" class="lbl">B-steps call the runtime</text>
+
+  <!-- runtime row 1 -->
+  <rect class="box" x="60" y="200" width="256" height="66" rx="5"/>
+  <text x="70" y="218" class="t">Case intake adapters</text>
+  <text x="70" y="233">Salesforce case queue · SAP invoice-ready signal</text>
+  <text x="70" y="247">one case processed once · claim recorded</text>
+
+  <rect class="box ai" x="342" y="200" width="256" height="66" rx="5"/>
+  <text x="352" y="218" class="t">Guardrails + model gateway</text>
+  <text x="352" y="233">Model Armor before every call · Gemini on Vertex AI</text>
+  <text x="352" y="247">Document AI · versioned prompts · response schema</text>
+
+  <rect class="box" x="624" y="200" width="256" height="66" rx="5"/>
+  <text x="634" y="218" class="t">Rules, scoring, reason codes</text>
+  <text x="634" y="233">rules in code · composite confidence</text>
+  <text x="634" y="247">one reason-code catalogue for both agents</text>
+
+  <rect class="box human" x="906" y="200" width="256" height="66" rx="5"/>
+  <text x="916" y="218" class="t">Review queue · the human gate</text>
+  <text x="916" y="233">Cloud Run app · approve · correct · reject</text>
+  <text x="916" y="247">decision, reviewer and time captured</text>
+
+  <!-- runtime row 2 -->
+  <rect class="box" x="60" y="284" width="256" height="66" rx="5"/>
+  <text x="70" y="302" class="t">Audit store</text>
+  <text x="70" y="317">immutable record per case · retention per 5.3</text>
+  <text x="70" y="331">outcome markers · feeds every scorecard</text>
+
+  <rect class="box" x="342" y="284" width="256" height="66" rx="5"/>
+  <text x="352" y="302" class="t">Evaluation suite</text>
+  <text x="352" y="317">backtest · frozen holdout · regression run</text>
+  <text x="352" y="331">before any prompt, model or threshold change</text>
+  <text x="352" y="345">a person approves each release (second gate)</text>
+
+  <rect class="box" x="624" y="284" width="256" height="66" rx="5"/>
+  <text x="634" y="302" class="t">Observability + controls</text>
+  <text x="634" y="317">OpenTelemetry → Cloud Trace, Cloud Logging</text>
+  <text x="634" y="331">Cloud Monitoring: completion, failures, queue, cost</text>
+  <text x="634" y="345">Ingredion-controlled kill switch</text>
+
+  <rect class="box" x="906" y="284" width="256" height="66" rx="5"/>
+  <text x="916" y="302" class="t">IAM + secrets</text>
+  <text x="916" y="317">one dedicated service account · least privilege</text>
+  <text x="916" y="331">credentials in Secret Manager</text>
+  <text x="916" y="345">write roles only for A6, A9 and A10</text>
+
+  <!-- data link -->
+  <path class="ln opt" d="M200 284 V275 H611 V150 H700 V138" marker-end="url(#f-arw)"/>
+  <text x="618" y="164" class="lbl">price discrepancies flagged at A5 → B2 evidence</text>
+  <text x="618" y="178" class="lbl">later · outside both SOWs</text>
+
+  <!-- reads bus -->
+  <path class="ln thin" d="M188 350 V380 H1048"/>
+  <path class="ln" d="M418 380 V420" marker-end="url(#f-arw)"/>
+  <path class="ln" d="M628 380 V420" marker-end="url(#f-arw)"/>
+  <path class="ln" d="M838 380 V420" marker-end="url(#f-arw)"/>
+  <path class="ln" d="M1048 380 V420" marker-end="url(#f-arw)"/>
+  <text x="440" y="375" class="lbl">reads · one dedicated service account, least privilege, both agents</text>
+
+  <rect class="box" x="320" y="420" width="196" height="86" rx="5"/>
+  <text x="330" y="438" class="t">SAP (read)</text>
+  <text x="330" y="453">master data, CMIR, UOM, pricing,</text>
+  <text x="330" y="467">contract, ATP, orders; billing,</text>
+  <text x="330" y="481">delivery, freight, invoice-ready</text>
+
+  <rect class="box" x="530" y="420" width="196" height="86" rx="5"/>
+  <text x="540" y="438" class="t">Salesforce (read)</text>
+  <text x="540" y="453">case queue by cohort, email body</text>
+  <text x="540" y="467">and attachments, sales orders,</text>
+  <text x="540" y="481">PO documents</text>
+
+  <rect class="box" x="740" y="420" width="196" height="86" rx="5"/>
+  <text x="750" y="438" class="t">PROS · Ariba · TermSync</text>
+  <text x="750" y="453">contract and fuel-rate files;</text>
+  <text x="750" y="467">read interface or scheduled extract</text>
+  <text x="750" y="481">to Cloud Storage, per source (Stage 1)</text>
+
+  <rect class="box" x="950" y="420" width="196" height="86" rx="5"/>
+  <text x="960" y="438" class="t">Existing RPA (transition)</text>
+  <text x="960" y="453">Power Automate keeps the cohorts</text>
+  <text x="960" y="467">not yet moved; fallback until retired;</text>
+  <text x="960" y="481">not changed by Parkar</text>
+
+  <!-- write group, Agent A only -->
+  <rect class="wrg" x="52" y="406" width="244" height="140" rx="6"/>
+  <text x="60" y="420" class="lbl" style="fill: var(--wr);">write · Agent A only, after a reviewer approves</text>
+  <rect class="box wr" x="60" y="426" width="228" height="30" rx="4"/>
+  <text x="70" y="445" class="t">SAP order API / BAPI via APIM · A9</text>
+  <rect class="box wr" x="60" y="462" width="228" height="30" rx="4"/>
+  <text x="70" y="481" class="t">Salesforce case update · A10</text>
+  <rect class="box wr" x="60" y="498" width="228" height="40" rx="4"/>
+  <text x="70" y="514" class="t">Outlook draft via Microsoft Graph · A6</text>
+  <text x="70" y="529">a draft only; the reviewer sends it</text>
+  <path class="wrln" d="M60 120 H28 V476 H52" marker-end="url(#f-arw-wr)"/>
+  <text transform="rotate(-90 18 300)" x="18" y="300" text-anchor="middle" class="lbl" style="fill: var(--wr);">A6, A9, A10 · the only writes · scoped roles</text>
+</svg>
+</div>
+<figcaption>The factory split on Google Cloud. Each agent is a set of thin step modules on Cloud Run; the runtime beneath them is identical. Both agents read Ingredion systems through one dedicated service account. Only Agent A writes: the SAP order and the Salesforce case after the human gate, and an Outlook draft the reviewer may send. The dotted link is the one data dependency between the agents: price discrepancies flagged at order entry become evidence for the pre-bill check.</figcaption>
+</figure>
+
+<h3>The two agents side by side</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col"></th><th scope="col">Agent A · Email Order Intake</th><th scope="col">Agent B · Pre-bill Validation</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Where it sits</td><td>At order entry, as the primary processor for the cohorts routed to it; the Existing RPA keeps the rest during the transition</td><td>Between invoice-ready and invoice-sent, before the customer portal's three-way match</td></tr>
+    <tr><td class="k">Trigger</td><td>New email-order case in the Salesforce queue for a cohort moved to the agent</td><td>Shipped order with a draft invoice ready in SAP</td></tr>
+    <tr><td class="k">Generative AI (Vertex AI)</td><td>A2 classify the email; A3 extract PO fields (with Document AI for scans); A6 draft the customer clarification</td><td>B3 read a PDF PO when no structured PO exists (Document AI if scanned); B6 explain the gap and draft the request</td></tr>
+    <tr><td class="k">Deterministic core</td><td>Direct mapping to SAP fields and validation (customer, ship-to, bill-to, material, CMIR, UOM), duplicate check, price, contract and ATP rules, composite confidence, payload build</td><td>One canonical schema, line pairing, four checks: price, freight and surcharge, quantity, payment terms</td></tr>
+    <tr><td class="k">Reads</td><td>Salesforce case queue and cases; SAP master data, CMIR, pricing, contract, ATP, orders</td><td>SAP, PROS, Salesforce, Ariba, TermSync, contract and fuel-rate files (read interface or scheduled extract to Cloud Storage)</td></tr>
+    <tr><td class="k">Writes</td><td><span class="flag">SAP order (A9), Salesforce case (A10)</span> after reviewer approval; an Outlook draft via Graph (A6) that only the reviewer sends</td><td><span class="yes">None</span>; owners act outside the agent</td></tr>
+    <tr><td class="k">Human gate</td><td>Every case in Phase 1; Phase 2 (high-confidence cases skip the gate) is an Ingredion decision at Gate 5</td><td>Every case that is not Matched; matched invoices are recorded only</td></tr>
+    <tr><td class="k">Outcomes</td><td>Agent-created · Agent-assisted · Returned to the manual queue (with reason code)</td><td>Matched · Updated PO required · Fix our side or decide</td></tr>
+    <tr><td class="k">Exits</td><td>A2 not an order; A4 master data missing; A6 unresolved; gate reject; A9 SAP rejects → manual queue (Customer Service)</td><td>No exits; a recheck from B2 runs when the updated PO arrives</td></tr>
+    <tr><td class="k">Measures</td><td>SOW 2.7 scorecard: completion rate (judged against the Existing RPA's automation rate on the same cohorts), field-level accuracy, undetected errors, reviewer confirmation, handling time and run cost; thresholds set at Gate 1 from the 500-PO backtest</td><td>Catch rate ≥ 95% incl. Kraft Heinz 4/4; false alarms ≤ 10%; traceability 100%; reviewer agreement ≥ 85%; time saved ≥ 30%; zero unattended actions</td></tr>
+    <tr><td class="k">Platform</td><td colspan="2">Cloud Run · Vertex AI (approved Gemini endpoint) · Document AI · Model Armor · Cloud Storage · audit store · Cloud Trace, Logging, Monitoring · IAM and Secret Manager; Dev, Test and Prod in the Ingredion Google Cloud project; services confirmed in Stage 2</td></tr>
+    <tr><td class="k">Status</td><td>Statement of Work No. 07, Ingredion redline v2 (20 Oct 2026): the contract text for both agents; commences 26 Oct 2026; scorecard thresholds set at Gate 1 from the backtest; scope and fees not reopened at Gate 1</td><td>Same SOW; step list confirmed in Stage 2; variances confirmed at Gate 1; invoice-ready definition agreed in Stage 2</td></tr>
+  </tbody>
+</table></div>
+
+<h2><span class="uc">Agent A</span>Email Order Intake Agent on Google Cloud</h2>
+<p class="sub">Processes all email orders from Salesforce, cohort by cohort. Ten steps, generative AI in three (A2, A3, A6), one human judgment gate, five exits to the manual queue with the agent's reason on the original case.</p>
+<div class="legend" aria-hidden="true">
+  <span><i></i> deterministic code</span>
+  <span><i class="ai"></i> generative AI on Vertex AI</span>
+  <span><i class="wr"></i> write to an Ingredion system</span>
+  <span><i class="exit"></i> exit to the manual queue</span>
+  <span><i class="human"></i> people</span>
+  <span><i class="audit"></i> layer</span>
+</div>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 1310" role="img" aria-label="Vertical flow. Customer POs arrive in Outlook mailboxes and become Salesforce cases; Ingredion routes each cohort to the agent, and the Existing RPA keeps the cohorts not yet moved. Steps A1 to A10 run top to bottom in the Ingredion Google Cloud project: pick up the case, classify with Gemini, read the PO with Gemini and Document AI, map to SAP and validate, rules and confidence, exceptions drafted with Gemini and saved as an Outlook draft, review summary, the human gate, build the SAP payload, create the order and read the incompletion log, update the Salesforce case. Exits at A2, A4, A6, the reviewer's reject and A9 join a rail to the manual queue. Only A6, A9 and A10 write to Ingredion systems. An audit band lists the audit store, tracing, evaluations, IAM and the kill switch.">
+  <defs>
+    <marker id="o-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="o-arw-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-ai" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="o-arw-wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-wr" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="o-arw-ex" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-ex" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <text class="lane" x="48" y="16">Integration · read or write</text>
+  <text class="lane" x="410" y="16">Step</text>
+  <text class="lane" x="856" y="16">Gate or exit</text>
+
+  <!-- inbound, existing -->
+  <rect class="band" x="36" y="24" width="1148" height="152" rx="8"/>
+  <text class="lane" x="48" y="42">Inbound · existing · Outlook mailboxes and the Salesforce case queue; the Existing RPA in transition</text>
+
+  <rect class="box" x="48" y="56" width="296" height="104" rx="5"/>
+  <text x="58" y="74" class="t">Existing RPA (Power Automate) · transition</text>
+  <text x="58" y="90">keeps processing the cohorts not yet moved</text>
+  <text x="58" y="105">to the agent; stays as fallback until</text>
+  <text x="58" y="120">Ingredion retires it; not changed by Parkar</text>
+  <text x="58" y="150" class="lbl">cut-over is a Salesforce routing change per cohort</text>
+
+  <rect class="box" x="410" y="56" width="380" height="40" rx="5"/>
+  <text x="600" y="73" text-anchor="middle" class="t">Outlook mailboxes → Salesforce case, one per email</text>
+  <text x="600" y="87" text-anchor="middle" class="lbl">customers send POs to 10+ shared mailboxes</text>
+  <path class="ln" d="M600 96 V116" marker-end="url(#o-arw)"/>
+  <rect class="box" x="410" y="116" width="380" height="44" rx="5"/>
+  <text x="600" y="133" text-anchor="middle" class="t">Ingredion routes each cohort of customers to the agent</text>
+  <text x="600" y="149" text-anchor="middle" class="lbl">Salesforce case queue · the other cohorts still go to the RPA</text>
+
+  <path class="ln" d="M790 138 H856" marker-end="url(#o-arw)"/>
+  <text x="798" y="131" class="lbl">unmoved</text>
+  <rect class="chip ok" x="856" y="116" width="316" height="44" rx="5"/>
+  <text x="866" y="133" class="t">Existing RPA creates the order, as today</text>
+  <text x="866" y="149">this path is not touched</text>
+
+  <path class="ln" d="M600 160 V222" marker-end="url(#o-arw)"/>
+  <text x="608" y="190" class="lbl">cohort moved to the agent · new email-order case</text>
+
+  <!-- agent band -->
+  <rect class="band" x="36" y="196" width="1148" height="938" rx="8"/>
+  <text class="lane" x="48" y="212">Ingredion Google Cloud project (Dev · Test · Prod) · Order Intake Agent on Cloud Run · one case processed once</text>
+
+  <!-- A1 -->
+  <rect class="box" x="48" y="222" width="296" height="60" rx="5"/>
+  <text x="58" y="242" class="t">Salesforce case queue + case</text>
+  <text x="58" y="258">read · new email-order case for a moved cohort</text>
+  <text x="58" y="273">original email body and attachments</text>
+  <path class="ln" d="M344 252 H410" marker-end="url(#o-arw)"/>
+  <text x="364" y="246" class="lbl">read</text>
+  <rect class="box" x="410" y="222" width="380" height="60" rx="5"/>
+  <text x="420" y="242" class="t">A1 · Pick up the case</text>
+  <text x="420" y="258">new email-order case, with the original email body and attachments</text>
+  <text x="420" y="273">claims the case (status) so the RPA and manual staff skip it</text>
+  <path class="ln" d="M600 282 V314" marker-end="url(#o-arw)"/>
+  <text x="606" y="302" class="lbl">case loaded · claimed</text>
+
+  <!-- A2 -->
+  <rect class="box ai" x="48" y="314" width="296" height="60" rx="5"/>
+  <text x="58" y="334" class="t">Gemini on Vertex AI · classify</text>
+  <text x="58" y="350">Model Armor screens email and PO text first</text>
+  <text x="58" y="365">versioned prompt · intent, PO numbers, language</text>
+  <path class="ailn" d="M344 344 H410" marker-start="url(#o-arw-ai)" marker-end="url(#o-arw-ai)"/>
+  <text x="356" y="338" class="lbl">LLM call</text>
+  <rect class="box ai" x="410" y="314" width="380" height="60" rx="5"/>
+  <text x="420" y="334" class="t">A2 · Classify the email</text>
+  <text x="420" y="350">new order, revised PO, duplicate or not an order · language</text>
+  <text x="420" y="365">splits multi-PO emails · revised and duplicate carry a flag</text>
+  <path class="exln" d="M790 344 H856" marker-end="url(#o-arw-ex)"/>
+  <text x="812" y="338" class="lbl">exit</text>
+  <rect class="box exit" x="856" y="314" width="316" height="60" rx="5"/>
+  <text x="866" y="334" class="t">Not an order → manual queue</text>
+  <text x="866" y="350">change, cancellation, inquiry, credit memo;</text>
+  <text x="866" y="365">non-English or handwritten · reason code recorded</text>
+  <path class="ln" d="M600 374 V406" marker-end="url(#o-arw)"/>
+  <text x="606" y="394" class="lbl">new or revised order</text>
+
+  <!-- A3 -->
+  <rect class="box ai" x="48" y="406" width="296" height="60" rx="5"/>
+  <text x="58" y="426" class="t">Gemini + Document AI · extract</text>
+  <text x="58" y="442">Document AI layout and token confidence for scans</text>
+  <text x="58" y="457">response schema: fields only, no tools · traced</text>
+  <path class="ailn" d="M344 436 H410" marker-start="url(#o-arw-ai)" marker-end="url(#o-arw-ai)"/>
+  <text x="356" y="430" class="lbl">LLM call</text>
+  <rect class="box ai" x="410" y="406" width="380" height="60" rx="5"/>
+  <text x="420" y="426" class="t">A3 · Read the PO</text>
+  <text x="420" y="442">PDF, scans, Excel, Word or email body · confidence per field</text>
+  <text x="420" y="457">one re-read with hints when a field fails a hard check</text>
+  <path class="ln" d="M600 466 V498" marker-end="url(#o-arw)"/>
+  <text x="606" y="486" class="lbl">fields + confidence</text>
+  <path class="ln" d="M740 498 V466" marker-end="url(#o-arw)"/>
+  <text x="748" y="486" class="lbl">a field fails validation → re-read once</text>
+
+  <!-- A4 -->
+  <rect class="box" x="48" y="498" width="296" height="60" rx="5"/>
+  <text x="58" y="518" class="t">SAP master data · CMIR · UOM (read)</text>
+  <text x="58" y="534">customer, ship-to, bill-to, material, CMIR,</text>
+  <text x="58" y="549">unit conversions · read interfaces confirmed in Stage 1</text>
+  <path class="ln" d="M344 528 H410" marker-end="url(#o-arw)"/>
+  <text x="360" y="522" class="lbl">lookup</text>
+  <rect class="box" x="410" y="498" width="380" height="60" rx="5"/>
+  <text x="420" y="518" class="t">A4 · Map to SAP and validate</text>
+  <text x="420" y="534">direct to SAP fields; no mapping database</text>
+  <text x="420" y="549">UOM from SAP conversion data · never assumed; ambiguous → reviewer</text>
+  <path class="exln" d="M790 528 H856" marker-end="url(#o-arw-ex)"/>
+  <text x="812" y="522" class="lbl">exit</text>
+  <rect class="box exit" x="856" y="498" width="316" height="60" rx="5"/>
+  <text x="866" y="518" class="t">Master data missing → manual queue</text>
+  <text x="866" y="534">customer, ship-to, bill-to or material not in SAP</text>
+  <text x="866" y="549">gap listed for Ingredion's master-data team</text>
+  <path class="ln" d="M600 558 V590" marker-end="url(#o-arw)"/>
+  <text x="606" y="578" class="lbl">mapped to SAP</text>
+
+  <!-- A5 -->
+  <rect class="box" x="48" y="590" width="296" height="60" rx="5"/>
+  <text x="58" y="610" class="t">SAP pricing · contract · ATP · orders (read)</text>
+  <text x="58" y="626">duplicates: ship-to, bill-to, PO no., date, qty</text>
+  <text x="58" y="641">price source and ATP read confirmed in Stage 1</text>
+  <path class="ln" d="M344 620 H410" marker-end="url(#o-arw)"/>
+  <text x="360" y="614" class="lbl">lookup</text>
+  <rect class="box" x="410" y="590" width="380" height="60" rx="5"/>
+  <text x="420" y="610" class="t">A5 · Rules and confidence</text>
+  <text x="420" y="626">price, contract, availability (ATP) and duplicate checks</text>
+  <text x="420" y="641">composite confidence per field · flags with both values</text>
+  <path class="ln" d="M600 650 V682" marker-end="url(#o-arw)"/>
+  <text x="606" y="670" class="lbl">flags + score</text>
+
+  <!-- A6 -->
+  <rect class="box ai" x="48" y="682" width="296" height="60" rx="5"/>
+  <text x="58" y="702" class="t">Gemini · clarification draft · Graph</text>
+  <text x="58" y="718">drafts the email for the flags that need the buyer</text>
+  <text x="58" y="733">saved as an Outlook draft via Microsoft Graph</text>
+  <path class="ailn" d="M344 712 H410" marker-start="url(#o-arw-ai)" marker-end="url(#o-arw-ai)"/>
+  <text x="356" y="706" class="lbl">LLM call</text>
+  <rect class="box ai" x="410" y="682" width="380" height="60" rx="5"/>
+  <text x="420" y="702" class="t">A6 · Exceptions</text>
+  <text x="420" y="718">drafts the customer clarification for the reviewer to send</text>
+  <text x="420" y="733">never sends, never changes a value · template if the model is down</text>
+  <path class="exln" d="M790 712 H856" marker-end="url(#o-arw-ex)"/>
+  <text x="812" y="706" class="lbl">exit</text>
+  <rect class="box exit" x="856" y="682" width="316" height="60" rx="5"/>
+  <text x="866" y="702" class="t">Unresolved → manual queue</text>
+  <text x="866" y="718">nothing usable could be read after the re-read;</text>
+  <text x="866" y="733">no clarification can clear it</text>
+  <path class="ln" d="M600 742 V774" marker-end="url(#o-arw)"/>
+  <text x="606" y="762" class="lbl">drafts attached</text>
+
+  <!-- A7 + gate -->
+  <text x="48" y="808" class="lbl">no integration · pure code</text>
+  <rect class="box" x="410" y="774" width="380" height="60" rx="5"/>
+  <text x="420" y="794" class="t">A7 · Review summary</text>
+  <text x="420" y="810">order summary with doubtful fields flagged, SAP candidates,</text>
+  <text x="420" y="825">reason codes and the draft · every case in Phase 1</text>
+  <path class="ln" d="M790 804 H856" marker-end="url(#o-arw)"/>
+  <text x="798" y="798" class="lbl">every case</text>
+  <rect class="box human" x="856" y="766" width="316" height="84" rx="5"/>
+  <text x="866" y="784" class="t">Human gate · review queue (Cloud Run app)</text>
+  <text x="866" y="800">reviewer approves, corrects or rejects</text>
+  <text x="866" y="815">every case in Phase 1 · Phase 2 is a Gate 5 decision</text>
+  <text x="866" y="830">corrections re-run A4 and A5 before A8</text>
+  <text x="866" y="845" class="lbl">rejected → manual queue, with the reviewer's reason</text>
+  <path class="exln" d="M1172 824 H1196"/>
+
+  <!-- A8 -->
+  <text x="48" y="900" class="lbl">no integration · pure code</text>
+  <rect class="box" x="410" y="866" width="380" height="60" rx="5"/>
+  <text x="420" y="886" class="t">A8 · Build SAP payload</text>
+  <text x="420" y="902">from validated and reviewer-corrected data</text>
+  <text x="420" y="917">idempotency key = case ID + PO number</text>
+  <path class="ln" d="M1014 850 V896 H790" marker-end="url(#o-arw)"/>
+  <text x="800" y="890" class="lbl">approved or corrected</text>
+  <path class="ln" d="M600 926 V958" marker-end="url(#o-arw)"/>
+  <text x="606" y="946" class="lbl">payload ready</text>
+
+  <!-- A9 -->
+  <rect class="box wr" x="48" y="958" width="296" height="60" rx="5"/>
+  <text x="58" y="978" class="t">SAP order API / BAPI via APIM</text>
+  <text x="58" y="994">write · creates the order (method approved at Gate 2)</text>
+  <text x="58" y="1009">then read · the SAP incompletion log</text>
+  <path class="wrln" d="M410 988 H344" marker-end="url(#o-arw-wr)"/>
+  <rect class="box" x="410" y="958" width="380" height="60" rx="5"/>
+  <text x="420" y="978" class="t">A9 · Create order</text>
+  <text x="420" y="994">write-ahead state · lookup before any retry · 3 retries</text>
+  <text x="420" y="1009">reads the incompletion log; entries become follow-ups</text>
+  <path class="exln" d="M790 988 H856" marker-end="url(#o-arw-ex)"/>
+  <text x="812" y="982" class="lbl">exit</text>
+  <rect class="box exit" x="856" y="958" width="316" height="60" rx="5"/>
+  <text x="866" y="978" class="t">SAP rejects → manual queue</text>
+  <text x="866" y="994">SAP message recorded with the case · alert raised</text>
+  <text x="866" y="1009">if SAP is down for all cases, new submissions pause</text>
+  <path class="ln" d="M600 1018 V1050" marker-end="url(#o-arw)"/>
+  <text x="606" y="1038" class="lbl">order created + incompletion log</text>
+
+  <!-- A10 -->
+  <rect class="box wr" x="48" y="1050" width="296" height="60" rx="5"/>
+  <text x="58" y="1070" class="t">Salesforce case</text>
+  <text x="58" y="1086">write · order number, status, audit note,</text>
+  <text x="58" y="1101">outcome marker, incompletion follow-ups</text>
+  <path class="wrln" d="M410 1080 H344" marker-end="url(#o-arw-wr)"/>
+  <rect class="box" x="410" y="1050" width="380" height="60" rx="5"/>
+  <text x="420" y="1070" class="t">A10 · Update the case</text>
+  <text x="420" y="1086">order number, status, audit note · case completed</text>
+  <text x="420" y="1101">outcome marker: Agent-created · Agent-assisted · follow-ups</text>
+  <path class="ln" d="M600 1110 V1150" marker-end="url(#o-arw)"/>
+  <text x="606" y="1134" class="lbl">case updated</text>
+
+  <!-- exit rail -->
+  <path class="exln" d="M1172 344 H1196 V1172 H1172" marker-end="url(#o-arw-ex)"/>
+  <path class="exln" d="M1172 528 H1196"/>
+  <path class="exln" d="M1172 712 H1196"/>
+  <path class="exln" d="M1172 988 H1196"/>
+  <text transform="rotate(-90 1212 760)" x="1212" y="760" text-anchor="middle" class="lbl" style="fill: var(--exit);">exits → manual queue · the agent's reason on the original Salesforce case</text>
+
+  <!-- outcomes -->
+  <rect class="chip ok" x="410" y="1150" width="380" height="44" rx="5"/>
+  <text x="420" y="1167" class="t">Order created without manual entry</text>
+  <text x="420" y="1183">SAP order · Salesforce case completed · full trace per case</text>
+  <rect class="box exit" x="856" y="1150" width="316" height="44" rx="5"/>
+  <text x="866" y="1167" class="t">Manual queue · Customer Service</text>
+  <text x="866" y="1183">every exit, with the agent's reason on the case</text>
+  <path class="ln thin" d="M600 1194 V1216" marker-end="url(#o-arw)"/>
+  <path class="ln thin" d="M1014 1194 V1216" marker-end="url(#o-arw)"/>
+
+  <!-- audit and controls -->
+  <rect class="band" x="36" y="1216" width="1148" height="78" rx="8"/>
+  <text x="48" y="1238" class="t">Audit store · per-email record, immutable, retention per 5.3: what was read (confidence per field), decided, drafted and posted, who approved, timings</text>
+  <text x="48" y="1257" class="lbl">Cloud Trace and Cloud Logging (OpenTelemetry), every case traced with timings and token counts · evaluations scored against reviewer corrections and final SAP orders, rerun before any prompt or model change</text>
+  <text x="48" y="1275" class="lbl">Cloud Monitoring: completion rate, failure reasons, review queue, run cost · one dedicated service account, least-privilege IAM, Secret Manager · release approval (second human gate) · Ingredion-controlled kill switch</text>
+</svg>
+</div>
+<figcaption>Where each step runs and what it touches, on Google Cloud. Gemini is called three times at most: to classify, to extract, and to draft the clarification when a flag needs the customer. Everything that maps, validates, scores, builds the payload and writes is ordinary code. Five exits lead to the manual queue, with a reason code on the original Salesforce case. Writes happen in three places only: the SAP order and the Salesforce case after the reviewer, and an Outlook draft the reviewer may send.</figcaption>
+</figure>
+
+<h3>Ten steps, where each runs</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">Step</th><th scope="col">Runs on</th><th scope="col">Reads · writes</th><th scope="col">Exit, loop or gate</th><th scope="col">Reason codes (examples; catalogue agreed in Stage 2)</th></tr></thead>
+  <tbody>
+    <tr><td class="k">A1 Pick up the case</td><td>Cloud Run, scheduled</td><td>Reads the Salesforce case queue for the moved cohorts and the case (email body, attachments). Writes a claim status on the case</td><td>None</td><td>—</td></tr>
+    <tr><td class="k">A2 Classify the email</td><td>Gemini behind Model Armor</td><td>Reads email text and attachment text</td><td>Exit when not an order or when the format is out of scope; revised PO and duplicate submissions continue with a flag; multi-PO emails are split</td><td><code>NOT_ORDER.CANCELLATION</code>, <code>NOT_ORDER.INQUIRY</code>, <code>FORMAT.NON_ENGLISH</code>, <code>EMAIL.REVISED_PO</code>, <code>EMAIL.DUPLICATE_SUBMISSION</code>, <code>EMAIL.MULTI_PO</code></td></tr>
+    <tr><td class="k">A3 Read the PO</td><td>Gemini + Document AI</td><td>Reads PDF, scans, Excel, Word, email body. Returns fields with confidence in a fixed response schema</td><td>Loop: a field that fails a hard check at A4 is re-read once with hints</td><td><code>EXTRACT.LOW_CONFIDENCE</code>, <code>EXTRACT.LINE_TOTALS_MISMATCH</code>, <code>EXTRACT.NO_LINES</code></td></tr>
+    <tr><td class="k">A4 Map to SAP and validate</td><td>Cloud Run code</td><td>Reads SAP master data: customer, ship-to, bill-to, material, CMIR, unit conversions. No mapping database</td><td>Exit when a partner or material is not in SAP; ambiguous matches and units go to the reviewer with candidates</td><td><code>MASTER.SHIPTO_NOT_FOUND</code>, <code>MASTER.MATERIAL_NOT_FOUND</code>, <code>CMIR.MULTIPLE_MATCHES</code>, <code>UOM.AMBIGUOUS</code></td></tr>
+    <tr><td class="k">A5 Rules and confidence</td><td>Cloud Run code</td><td>Reads SAP pricing, contract, ATP and existing orders</td><td>Flags only; the case continues to A6 and A7</td><td><code>PRICE.PO_VS_SAP</code>, <code>CONTRACT.NONE</code>, <code>ATP.SHORT</code>, <code>DUP.POSSIBLE</code></td></tr>
+    <tr><td class="k">A6 Exceptions</td><td>Gemini behind Model Armor; Microsoft Graph</td><td><span class="flag">Writes</span> an Outlook draft in the shared mailbox (never sends)</td><td>Exit when nothing usable could be read and no clarification can clear it</td><td><code>EXCEPTION.UNRESOLVED</code>, <code>FORMAT.UNREADABLE</code></td></tr>
+    <tr><td class="k">A7 Review summary</td><td>Cloud Run code</td><td>No integration</td><td>Gate: every case in Phase 1; in Phase 2 a clean, high-confidence case continues</td><td>—</td></tr>
+    <tr><td class="k">Gate</td><td>Reviewer in the review queue app</td><td>Records approve, correct or reject with reviewer and time</td><td>Approved or corrected → A8 (A4 and A5 re-run on corrected values). Rejected → manual queue</td><td><code>REVIEW.REJECTED</code>, <code>REVIEW.CORRECTED</code>, <code>REVIEW.RECHECK_FLAGGED</code></td></tr>
+    <tr><td class="k">A8 Build SAP payload</td><td>Cloud Run code</td><td>No integration</td><td>Unresolved partner or material → back to the reviewer</td><td>—</td></tr>
+    <tr><td class="k">A9 Create order</td><td>Cloud Run code → SAP order API / BAPI via APIM</td><td><span class="flag">Writes</span> the order; writes a "submitting" state before the call; looks the order up by its reference before any retry; then reads the incompletion log</td><td>Exit when SAP rejects, or after 3 retries when SAP is unavailable; pause when SAP is down for all cases</td><td><code>SAP.REJECTED</code>, <code>SAP.UNAVAILABLE</code>, <code>SAP.RECONCILED</code>, <code>SAP.INCOMPLETE</code></td></tr>
+    <tr><td class="k">A10 Update the case</td><td>Cloud Run code → Salesforce</td><td><span class="flag">Writes</span> order number, status, audit note, the outcome marker and the incompletion follow-ups; retried independently of A9</td><td>None</td><td>Outcome: <code>AGENT_CREATED</code>, <code>AGENT_ASSISTED</code>, <code>RETURNED</code></td></tr>
+  </tbody>
+</table></div>
+
+<div class="two">
+<section>
+<h3>Cohort rollout and the RPA transition</h3>
+<ul class="tight">
+  <li><strong>Cut-over is a routing change, not a code change.</strong> Ingredion assigns a cohort of customers to the agent's Salesforce queue; from then on the agent is the primary processor for those customers and the Existing RPA no longer sees them. Moving a cohort back is the same change in reverse, which is also how the kill switch fails back.</li>
+  <li><strong>Shadow first, per cohort.</strong> A cohort runs in shadow (the agent processes, the RPA still creates the orders, results are compared) before it is moved, so the agent's completion rate is known against the RPA's on the same customers.</li>
+  <li><strong>The RPA stays deployable</strong> until Ingredion retires it (an Ingredion decision informed by the closure report). Parkar does not change it.</li>
+  <li><strong>Volume.</strong> Primary processing for all cohorts is several times the failed-case volume the earlier, failure-only draft was sized for; reviewer capacity, Gemini quota and run cost per cohort are measured in shadow mode before each cut-over.</li>
+</ul>
+<h3>Measures: the SOW 2.7 scorecard</h3>
+<p class="note">SOW No. 07 (section 2.7) sets six measures for Agent A: completion rate (share of email order cases completed as SAP sales orders), field-level accuracy, undetected errors, reviewer confirmation, handling time and run cost. Their thresholds are set at Gate 1 from the Stage 1 backtest of 500 past POs including RPA-failed POs, with the final SAP orders as the answer key, and they are the basis for Gates 4 and 5. The earlier targets in the clarification responses (recovery ≥ 50% at Gate 1, ≥ 70% at Gate 4, ≥ 80% before Phase 2; undetected errors ≤ 2% of key fields, ≤ 0.5% before Phase 2) were written for the failed-case scope and now serve only as Parkar's starting proposal; the headline measure we propose is the <strong>completion rate on a cohort against the Existing RPA's automation rate on the same cohort</strong>. From Stage 5 Parkar reports twelve measures from the audit trail and dashboards (cases received and completed, orders created, incompletion items and follow-ups, reviewer corrections, cases returned to the rework path, failure reasons by category, accuracy and undetected errors, handling time, run cost, trends against the baseline).</p>
+</section>
+<section>
+<h3>Production modes</h3>
+<ul class="tight">
+  <li><strong>Shadow (per cohort):</strong> live cases, no SAP order, no Salesforce update, no Outlook draft; results compared with the RPA's or the manual order; tuning.</li>
+  <li><strong>Assisted (Phase 1):</strong> every result confirmed or corrected by an Ingredion reviewer before A8; corrections feed the evaluation set.</li>
+  <li><strong>Phase 2 (Gate 5 decision):</strong> high-confidence cases skip the gate; anything with a price, contract or availability discrepancy, a rule failure, a revised or duplicate submission, or a possible SAP duplicate always goes to the reviewer.</li>
+</ul>
+<h3>Decisions the redline leaves for the stages</h3>
+<ul class="tight">
+  <li>Google Cloud services and the review queue app design <span class="tbc">[Stage 2]</span>; the SAP method, order API or BAPI, through APIM <span class="tbc">[Gate 2]</span>.</li>
+  <li>Validation location, SAP or Google Cloud <span class="tbc">[recommended Stage 1, decided Gate 1]</span>.</li>
+  <li>Read interface or scheduled extract per source; SAP pricing, contract and ATP reads <span class="tbc">[Stage 1]</span>.</li>
+  <li>Cohort order and shadow duration per cohort; reviewer capacity per cohort <span class="tbc">[Gate 1]</span>.</li>
+  <li>Phase 2 criteria for skipping the gate <span class="tbc">[Gate 5]</span>.</li>
+</ul>
+</section>
+</div>
+
+<h3>Operational controls</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">Control</th><th scope="col">What the design commits to</th><th scope="col">Engineering note</th></tr></thead>
+  <tbody>
+    <tr><td class="k">One case, once</td><td>The agent claims each case in Salesforce; the RPA and manual staff skip claimed cases; unique reference = case ID + PO number</td><td>A persisted per-case state machine (picked up → classified → extracted → validated → scored → exceptions → in review → approved → submitting → created → case updated, or returned) is the idempotency record.</td></tr>
+    <tr><td class="k">Duplicate orders</td><td>Revised and duplicate submissions flagged at A2; duplicate-order check against SAP at A5; lookup by reference before any retry at A9</td><td>The pre-retry lookup needs the SAP order field that carries the customer PO number; confirmed in Stage 1.</td></tr>
+    <tr><td class="k">SAP timeout</td><td>Look the order up, then retry up to 3 times with increasing waits, then exit to the manual queue and alert; pause all submissions if SAP is down</td><td>Pause automatically after N consecutive failures; resume by hand; both logged.</td></tr>
+    <tr><td class="k">Incompletion log</td><td>Read after every creation; entries become follow-ups on the Salesforce case and a flag on the audit record</td><td>The log is advisory: an order exists even if the read fails; the failure is recorded, never retried as a creation.</td></tr>
+    <tr><td class="k">Outlook drafts</td><td>A6 saves the clarification as a draft in the shared mailbox through Microsoft Graph; only the reviewer sends it</td><td>Graph permission scoped to drafts on the shared mailbox (no send permission); the draft text also sits on the review item, so a Graph failure never blocks the case.</td></tr>
+    <tr><td class="k">Kill switch</td><td>Ingredion-controlled; stops new cases immediately; in-flight cases complete or return; each use logged</td><td>Failing back is the same Salesforce routing change that moved the cohort; the RPA keeps running for unmoved cohorts throughout.</td></tr>
+    <tr><td class="k">Guardrails</td><td>Model Armor screens email and PO text before every model call; the model answers in a fixed response schema with no tools</td><td>Model Armor fails closed; a blocked text parks the case for a reviewer and never reaches Gemini.</td></tr>
+    <tr><td class="k">Learning</td><td>Corrections captured and added to the evaluation set; prompts, rules and thresholds adjusted; every change re-tested and approved by a person; no self-learning</td><td>Holdout frozen for Stage 4; evaluation runs on every build (Gate 3 criterion).</td></tr>
+    <tr><td class="k">Data</td><td>PO data stays in the Ingredion Google Cloud project; retention per 5.3; no masking in non-production</td><td>Region, data residency and VPC Service Controls perimeter are Stage 2 confirmations.</td></tr>
+  </tbody>
+</table></div>
+<h2><span class="uc">Agent B</span>Pre-bill Validation and Dispute Prevention Agent on Google Cloud</h2>
+<p class="sub">Unchanged in its eight steps since 16 October and moved to the Ingredion Google Cloud project by redline v2, with all four checks in the first release. The verdict on the whiteboard sketch, the refined flow and the rules are kept below; what redline v2 changes for this agent follows at the end of the section.</p>
+<section class="verdict" aria-label="Feasibility verdict">
+  <span class="pill">Feasible</span>
+  <div>
+    <p>The skeleton in the sketch is the SOW's own design: pull PO and invoice into one schema, let rules decide, invoke a Gemini agent only afterwards to write the reasoning, and notify people through a review queue app. Six things change between the sketch and what we will build:</p>
+    <ol>
+      <li><strong>Code owns the verdict, the model owns the explanation.</strong> The box labelled "Draft Reasoning Verdict" splits in two: B5 (rules) produces the outcome; B6 (Vertex AI) only explains it and drafts the request. The model can never change an outcome.</li>
+      <li><strong>One verdict becomes three outcomes.</strong> Matched · Updated PO required · Fix our side or decide. A matched invoice is recorded and never waits for a person or a model call.</li>
+      <li><strong>"Ingredion Platform" is six named read-only sources</strong>, reached through one dedicated identity that can read and never write: SAP, PROS, Salesforce, Ariba, TermSync, contract and fuel-rate files.</li>
+      <li><strong>The email → Graph API → PDF path is a fallback, not the main road.</strong> B3 reads structured PO data first; a PDF is parsed only when no structured PO exists, and its text is screened by Model Armor before any model sees it.</li>
+      <li><strong>The review queue app records the decision</strong>, not just an email. The named owner confirms or overrides every flagged case (B7); nothing skips this step.</li>
+      <li><strong>Four pieces the sketch did not have:</strong> the B1 trigger from SAP, missing-data handling in B2, the append-only audit trail (B8) with the recheck loop when the updated PO arrives, and the evaluation scorecard that gates every release.</li>
+    </ol>
+  </div>
+</section>
+<h3>The refined flow</h3>
+<div class="legend" aria-hidden="true">
+  <span><i></i> deterministic code</span>
+  <span><i class="ai"></i> generative AI (Vertex AI)</span>
+  <span><i class="human"></i> people</span>
+  <span><i class="opt"></i> optional source</span>
+  <span><i class="audit"></i> audit trail</span>
+</div>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 720" role="img" aria-label="Eight-step flow: read-only Ingredion sources feed the agent service, which picks up the draft invoice, assembles evidence, reads the PO, normalises to one schema and compares with five rules into three outcomes. Only PDF reading and the explanation use a Vertex AI model behind Model Armor. Flagged cases go to a human review queue; every step is recorded in an append-only audit trail, and an updated PO triggers a recheck from step two.">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <!-- lanes -->
+  <rect class="band" x="36" y="24" width="1148" height="132" rx="8"/>
+  <rect class="band" x="36" y="186" width="1148" height="164" rx="8"/>
+  <rect class="band" x="36" y="380" width="1148" height="100" rx="8"/>
+  <rect class="band" x="36" y="510" width="1148" height="100" rx="8"/>
+  <rect class="band" x="36" y="640" width="1148" height="62" rx="8"/>
+  <text class="lane" x="36" y="16">Ingredion systems · read-only, one dedicated service account</text>
+  <text class="lane" x="1184" y="180" text-anchor="end">Agent service · deterministic code</text>
+  <text class="lane" x="36" y="374">Vertex AI (Gemini) · generative AI, two steps only</text>
+  <text class="lane" x="36" y="504">People · the human gate (B7)</text>
+
+  <!-- sources -->
+  <rect class="box" x="72" y="66" width="134" height="68" rx="5"/>
+  <text x="139" y="86" text-anchor="middle" class="t">SAP</text>
+  <text x="139" y="102" text-anchor="middle">draft invoice · shipment</text>
+  <text x="139" y="117" text-anchor="middle">price condition record</text>
+
+  <rect class="box" x="233" y="66" width="134" height="68" rx="5"/>
+  <text x="300" y="86" text-anchor="middle" class="t">PROS</text>
+  <text x="300" y="102" text-anchor="middle">contract / list price</text>
+
+  <rect class="box" x="394" y="66" width="134" height="68" rx="5"/>
+  <text x="461" y="86" text-anchor="middle" class="t">Salesforce</text>
+  <text x="461" y="102" text-anchor="middle">sales order</text>
+  <text x="461" y="117" text-anchor="middle">PO as captured</text>
+
+  <rect class="box" x="555" y="66" width="134" height="68" rx="5"/>
+  <text x="622" y="86" text-anchor="middle" class="t">Ariba / portal</text>
+  <text x="622" y="102" text-anchor="middle">structured PO</text>
+
+  <rect class="box" x="716" y="66" width="134" height="68" rx="5"/>
+  <text x="783" y="86" text-anchor="middle" class="t">TermSync</text>
+  <text x="783" y="102" text-anchor="middle">disputes · history</text>
+
+  <rect class="box" x="877" y="66" width="134" height="68" rx="5"/>
+  <text x="944" y="86" text-anchor="middle" class="t">Contract &amp;</text>
+  <text x="944" y="102" text-anchor="middle" class="t">fuel-rate files</text>
+  <text x="944" y="117" text-anchor="middle">surcharge terms</text>
+
+  <rect class="box opt" x="1038" y="66" width="134" height="68" rx="5"/>
+  <text x="1105" y="86" text-anchor="middle" class="t">Mailbox (Graph API)</text>
+  <text x="1105" y="102" text-anchor="middle">PDF PO · only if no</text>
+  <text x="1105" y="117" text-anchor="middle">structured PO exists</text>
+
+  <!-- SAP feeds B1; everything feeds B2 -->
+  <path class="ln arrow" d="M139 134 V232"/>
+  <text x="146" y="200" class="lbl">draft invoice ready</text>
+  <path class="ln thin" d="M139 160 H1105"/>
+  <path class="ln thin" d="M300 134 V160 M461 134 V160 M622 134 V160 M783 134 V160 M944 134 V160"/>
+  <path class="ln thin opt" d="M1105 134 V160"/>
+  <path class="ln arrow" d="M300 160 V232"/>
+  <text x="308" y="200" class="lbl">reads evidence · never writes</text>
+
+  <!-- agent steps -->
+  <rect class="box" x="72" y="232" width="140" height="72" rx="5"/>
+  <text x="142" y="252" text-anchor="middle" class="t">B1 · Pick up</text>
+  <text x="142" y="268" text-anchor="middle">shipped orders with a</text>
+  <text x="142" y="283" text-anchor="middle">draft invoice ready</text>
+
+  <rect class="box" x="240" y="232" width="150" height="72" rx="5"/>
+  <text x="315" y="252" text-anchor="middle" class="t">B2 · Assemble evidence</text>
+  <text x="315" y="268" text-anchor="middle">PO · shipment · invoice</text>
+  <text x="315" y="283" text-anchor="middle">price record · rate files</text>
+  <text x="315" y="297" text-anchor="middle" class="lbl">missing data → flagged</text>
+
+  <rect class="box" x="418" y="232" width="150" height="72" rx="5"/>
+  <text x="493" y="252" text-anchor="middle" class="t">B3 · Read the PO</text>
+  <text x="493" y="268" text-anchor="middle">structured source first</text>
+  <text x="493" y="283" text-anchor="middle">PDF → Gemini (tiered)</text>
+
+  <rect class="box" x="596" y="232" width="150" height="72" rx="5"/>
+  <text x="671" y="252" text-anchor="middle" class="t">B4 · Normalise</text>
+  <text x="671" y="268" text-anchor="middle">UOM + currency</text>
+  <text x="671" y="283" text-anchor="middle">PO line ↔ SAP line · one schema</text>
+
+  <rect class="box" x="774" y="232" width="150" height="72" rx="5"/>
+  <text x="849" y="252" text-anchor="middle" class="t">B5 · Compare (5 rules)</text>
+  <text x="849" y="268" text-anchor="middle">price · freight · surcharge</text>
+  <text x="849" y="283" text-anchor="middle">quantity · payment terms</text>
+
+  <path class="ln arrow" d="M212 268 H238"/>
+  <path class="ln arrow" d="M390 268 H416"/>
+  <path class="ln arrow" d="M568 268 H594"/>
+  <path class="ln arrow" d="M746 268 H772"/>
+  <path class="ln arrow" d="M924 268 H950"/>
+
+  <!-- outcomes -->
+  <rect class="chip ok" x="952" y="224" width="220" height="26" rx="4"/>
+  <text x="962" y="241">Matched → recorded only (B8)</text>
+  <rect class="chip" x="952" y="256" width="220" height="26" rx="4"/>
+  <text x="962" y="273">Updated PO required → B6, B7</text>
+  <rect class="chip" x="952" y="288" width="220" height="26" rx="4"/>
+  <text x="962" y="305">Fix our side or decide → B6, B7</text>
+
+  <!-- matched goes straight to the audit trail -->
+  <path class="ln arrow" d="M1172 237 H1200 V671 H1186"/>
+  <text transform="rotate(-90 1212 460)" x="1212" y="460" text-anchor="middle" class="lbl">matched → recorded, no review</text>
+
+  <!-- Vertex AI -->
+  <rect class="box ai" x="418" y="404" width="150" height="56" rx="5"/>
+  <text x="493" y="422" text-anchor="middle" class="t">Model Armor</text>
+  <text x="493" y="437" text-anchor="middle">injection + sensitive data</text>
+  <text x="493" y="451" text-anchor="middle">screen PO text first</text>
+
+  <rect class="aig" x="596" y="392" width="576" height="78" rx="6"/>
+  <text x="606" y="404" class="lbl">Gemini model endpoint · versioned prompts · no tools · every call traced</text>
+  <rect class="box ai" x="608" y="412" width="200" height="46" rx="5"/>
+  <text x="708" y="430" text-anchor="middle" class="t">B3 · read PDF PO</text>
+  <text x="708" y="446" text-anchor="middle">→ PO lines as JSON, same schema</text>
+  <rect class="box ai" x="972" y="412" width="188" height="46" rx="5"/>
+  <text x="1066" y="430" text-anchor="middle" class="t">B6 · explain and draft</text>
+  <text x="1066" y="446" text-anchor="middle">gap summary · draft request</text>
+
+  <path class="ailn arrow" d="M493 304 V402"/>
+  <text x="500" y="358" class="lbl">PDF text</text>
+  <path class="ailn arrow" d="M568 432 H594"/>
+  <path class="ailn arrow" d="M708 412 V306"/>
+  <text x="716" y="358" class="lbl">PO lines (JSON)</text>
+  <path class="ailn arrow" d="M1062 314 V410"/>
+  <text x="1070" y="358" class="lbl">verdict + evidence</text>
+
+  <!-- people -->
+  <rect class="box human" x="596" y="534" width="220" height="60" rx="5"/>
+  <text x="706" y="552" text-anchor="middle" class="t">B7 · Review queue</text>
+  <text x="706" y="568" text-anchor="middle">review queue app notifies the</text>
+  <text x="706" y="583" text-anchor="middle">named owner per issue type</text>
+
+  <rect class="box human" x="846" y="534" width="160" height="60" rx="5"/>
+  <text x="926" y="552" text-anchor="middle" class="t">Owner decides</text>
+  <text x="926" y="568" text-anchor="middle">confirms or overrides</text>
+  <text x="926" y="583" text-anchor="middle">no case skips this</text>
+
+  <rect class="box human" x="1036" y="534" width="136" height="60" rx="5"/>
+  <text x="1104" y="552" text-anchor="middle" class="t">Acts outside the agent</text>
+  <text x="1104" y="568" text-anchor="middle">request updated PO</text>
+  <text x="1104" y="583" text-anchor="middle">fix our side · release</text>
+
+  <path class="ailn arrow" d="M1062 458 V492 H706 V532"/>
+  <text x="720" y="486" class="lbl">explanation + draft, attached to the case</text>
+  <path class="ln arrow" d="M816 564 H844"/>
+  <path class="ln arrow" d="M1006 564 H1034"/>
+  <path class="ln arrow" d="M926 594 V638"/>
+  <text x="934" y="622" class="lbl">decision + reason</text>
+
+  <!-- audit trail -->
+  <text x="48" y="664" class="t">B8 · Audit store — per order: what was read, compared, explained and routed, and who decided.</text>
+  <text x="48" y="684" class="lbl">Append-only, never deleted · the scorecard is computed from these records · when the updated PO arrives, the order is rechecked from B2.</text>
+  <path class="ln arrow" d="M36 671 H22 V334 H226 V290 H238"/>
+  <text x="60" y="328" class="lbl">updated PO → recheck</text>
+</svg>
+</div>
+<figcaption>Where each step runs. Deterministic code picks up the invoice, assembles the evidence, normalises both documents into one schema and decides. Gemini on Vertex AI is called in two places only: to read a PDF PO when nothing structured exists, and to explain a gap and draft the request after code has decided. A person confirms every flagged case. Matched invoices are recorded and never wait for a model or a reviewer.</figcaption>
+</figure>
+
+<h3>Sketch versus refined, element by element</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">In the sketch</th><th scope="col">Refined</th><th scope="col">Why (source)</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Connection · auth client (router + controller)</td><td>Kept. Same service shape as the DOIT Vertex AI integration: a thin API, a controller per step, a Vertex AI gateway. Secrets move to a dedicated service account and Secret Manager; the identity that reads client systems is read-only.</td><td>SOW: access and secrets; "writes to no Ingredion system".</td></tr>
+    <tr><td class="k">"Ingredion Platform" → PO and invoice</td><td>Six named read-only sources. SAP supplies the draft invoice, shipment and price condition record; PROS the contract price; Salesforce the order and the captured PO; Ariba the structured PO; TermSync dispute history; the contract and fuel-rate files the surcharge terms.</td><td>SOW B2 and target architecture. Ariba and TermSync read access is a Stage 1 assumption.</td></tr>
+    <tr><td class="k">Email → Graph API → PO (pdf, any form) → parse</td><td>Demoted to a fallback inside B3. Structured PO data is read first; the PDF is parsed only when no structured PO exists, its text screened by Model Armor, Document AI used only for scans. Mailbox scanning per invoice is unreliable for matching an email to an order; prefer the PO attachment stored with the sales order.</td><td>SOW B3 tiered read; the mailbox path is the Order Intake use case's job.</td></tr>
+    <tr><td class="k">Relational / JSON · "data compared follows same schema"</td><td>Kept and made explicit as B4: one canonical schema for PO and invoice, with unit-of-measure and currency conversion and line pairing done before any rule runs.</td><td>SOW B4; business data-trust table (e.g. BAG→KG, billing-date currency).</td></tr>
+    <tr><td class="k">Comparison based on rules (5 checks) → verdict</td><td>Kept as B5. The five checks are the business briefing's rows (price, freight, fuel surcharge, quantity, payment terms); the SOW groups freight and surcharge. First release switches on price and freight/surcharge; quantity and terms follow. One verdict becomes three outcomes.</td><td>SOW B5 and rollout table; briefing slide 9 and 10.</td></tr>
+    <tr><td class="k">Agent invoke → Vertex AI (sys prompt, logic, tools) → review queue app → "Draft Reasoning Verdict"</td><td>Split. B6 on Vertex AI writes the explanation per gap and the draft PO-update request or fix note; it never produces or alters the verdict. Tools are read-only (case evidence). The review queue app is the B7 queue, where the owner's confirm or override is captured. Matched invoices skip B6 and B7.</td><td>SOW B6, B7: "no case skips this"; "rules decide, a person acts".</td></tr>
+    <tr><td class="k">Not drawn</td><td>B1 trigger from SAP's shipped-with-draft-invoice list; missing-data outcome in B2; B8 append-only audit trail; recheck from B2 when the updated PO arrives; evaluation scorecard and release approval; Dev, Test and Prod in the Ingredion Google Cloud project.</td><td>SOW B1, B2, B8, observability and governance, environments.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Feasibility by component</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">Component</th><th scope="col">Verdict</th><th scope="col">What it takes</th></tr></thead>
+  <tbody>
+    <tr><td class="k">SAP read: draft invoices, shipment, price condition</td><td class="yes">Feasible</td><td>Read-only service identity on the billing due list and pricing conditions. Access tickets run about five working days; agreed extracts keep Stage 1 moving if direct access is late.</td></tr>
+    <tr><td class="k">PROS, Salesforce, Ariba, TermSync, rate files</td><td class="cond">Feasible, assumed</td><td>Ariba and TermSync read access is an assumption to confirm in Stage 1. Each source gets a connector behind a read-only interface with a stub for Dev.</td></tr>
+    <tr><td class="k">Graph API mailbox read for PDF POs</td><td class="cond">Feasible, narrow use</td><td>App registration with mail read scoped to specific shared mailboxes. Matching a message to an order is the weak point, so use it only when the PO exists nowhere else.</td></tr>
+    <tr><td class="k">PDF PO extraction on Vertex AI (+ Document AI for scans)</td><td class="yes">Feasible</td><td>Parkar's invoice agent reached about 93% straight-through on mixed formats. Output must land in the canonical schema with per-field confidence; low confidence routes to "missing data", never to "matched".</td></tr>
+    <tr><td class="k">Rules engine, five checks, one schema</td><td class="yes">Feasible, and the core</td><td>Pure code, unit-tested, no model. Needs UOM tables (lb ↔ CWT, BAG → KG), currency rates by billing date, PO tolerances. Variances and owners are confirmed on 23 Oct.</td></tr>
+    <tr><td class="k">Gemini agent for explanation and draft</td><td class="yes">Feasible</td><td>Versioned prompts; Model Armor in front; tools read-only; the evaluation set is rerun before any prompt or model change and a person approves the release.</td></tr>
+    <tr><td class="k">review queue app notification</td><td class="cond">Feasible, channel TBC</td><td>The SOW leaves the B7 channel open. Whatever is chosen must capture the owner's decision back into the case: an adaptive card, a small queue page, or structured reply parsing.</td></tr>
+    <tr><td class="k">Audit trail and recheck loop</td><td class="yes">Feasible</td><td>Append-only store with soft updates and a per-order record; a rerun from B2 is triggered when the updated PO lands.</td></tr>
+    <tr><td class="k">"Writes to no Ingredion system"</td><td class="yes">Design constraint</td><td>Enforced by the identity's roles, not by convention: the only writable stores are the agent's own queue and audit records.</td></tr>
+    <tr><td class="k">Observability and scorecard</td><td class="yes">Feasible</td><td>OpenTelemetry into Cloud Trace with OpenTelemetry; the scorecard job reads the audit records; Cloud Monitoring alerts on catch rate, false alarms, missing data, queue depth and cost.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="two">
+<section>
+<h3>The five rules</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">Check</th><th scope="col">Rule</th><th scope="col">Release</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Unit price</td><td>Exact after UOM and currency conversion; SAP price at billing date versus PO price</td><td>1</td></tr>
+    <tr><td class="k">Freight</td><td>Any charge not on the PO is flagged</td><td>1</td></tr>
+    <tr><td class="k">Fuel surcharge</td><td>Any charge not on the PO is flagged, even if the contract allows it</td><td>1</td></tr>
+    <tr><td class="k">Quantity</td><td>Shipped quantity inside the PO range after UOM conversion; no tolerance stated means exact; over-shipments checked first</td><td>2</td></tr>
+    <tr><td class="k">Payment terms</td><td>Exact match; a backstop while the root fix lands at contract and order setup</td><td>2</td></tr>
+  </tbody>
+</table></div>
+<p>Anchor case for the test set: Kraft Heinz sales order 809-6862, which fails all five (40.14 vs 47.00 USD/CWT; a 300 USD surcharge not on the PO; 170,250 lb shipped against 170,000; 110 against 120 days). Clean, single-error, multi-error, missing-data and borderline orders sit beside it so the rules are not tuned to one order.</p>
+</section>
+<section>
+<h3>One schema for both documents</h3>
+<p>PO and invoice are mapped into the same shape before B5 runs, so every rule compares like with like and every number carries the record it came from.</p>
+<pre>{
+  "doc_type": "po" | "invoice",
+  "order_ref": "809-6862",
+  "source": "ariba" | "sap" | "salesforce" | "pdf",
+  "currency": "USD",
+  "payment_terms_days": 120,
+  "lines": [{
+    "line_no": 1, "material": "…",
+    "qty": 170000, "qty_uom": "LB",
+    "tolerance_pct": null,
+    "unit_price": 40.14, "price_uom": "CWT",
+    "price_date": "2026-08-14"
+  }],
+  "charges": [{ "type": "fuel_surcharge", "amount": 300.00 }],
+  "evidence": [{ "field": "unit_price",
+                 "system": "SAP", "record": "condition A005/…" }]
+}</pre>
+</section>
+</div>
+
+<h3>Outcomes and who acts</h3>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">Outcome</th><th scope="col">When</th><th scope="col">What happens next</th><th scope="col">Owner (proposed)</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Matched</td><td>All five checks pass and no data is missing</td><td>Recorded in B8; the invoice goes out as today. No model call, no reviewer.</td><td>Nobody</td></tr>
+    <tr><td class="k">Updated PO required</td><td>SAP is right and the PO is stale (valid price change, added freight or surcharge, quantity, terms)</td><td>B6 drafts the request with evidence; B7 owner confirms; the owner asks the customer for the updated PO; recheck from B2 when it arrives.</td><td>Pricing &amp; Billing for price and surcharge; Customer Service for quantity; AR &amp; Collections for terms</td></tr>
+    <tr><td class="k">Fix our side or decide</td><td>SAP is wrong, a source is unclear, or evidence is missing (including a missing SAP price)</td><td>B6 drafts an internal note; B7 owner decides; never treated as matched. Missing prices are flagged to the pricing teams, not fixed here.</td><td>Pricing &amp; Billing, or PoC lead and IT data owners for missing data</td></tr>
+  </tbody>
+</table></div>
+
+<h3>What stays open until 23 October</h3>
+<ul class="tight">
+  <li>Named owner per issue type, and the mailbox or channel for B7 notifications.</li>
+  <li>Allowed variances per check, and "which source wins" sign-off.</li>
+  <li>Read access to Ariba and TermSync; the Google Cloud services list; Dev project from Stage 1.</li>
+  <li>How the updated-PO request is run today (who, channel, customer response time) and the fallback when it is late.</li>
+  <li>Finance reviewer for the value method; baseline minutes per case for the time-saved measure.</li>
+</ul>
+
+
+<h3>What redline v2 changes for Agent B</h3>
+<ul class="tight">
+  <li><strong>Platform.</strong> B1, B2, B4, B5 and B8 run as agent code on Cloud Run in the Ingredion Google Cloud project; Gemini on Vertex AI serves B3 and B6; Document AI is optional for scanned POs (confirmed in Stage 2); Model Armor screens PO text before every model call; scheduled extracts for sources with no read interface land in Cloud Storage; the audit store is immutable with retention per 5.3; Cloud Trace, Logging and Monitoring carry the dashboards for catch rate, false alarms, missing data, queue and cost; one dedicated service account with read-only, least-privilege access to all six sources.</li>
+  <li><strong>Four checks in the first release</strong>, not a staged rollout: price exact after UOM and currency conversion; freight and surcharge, any charge not on the PO flagged; quantity within the PO range, over-shipments first; payment terms exact. The Kraft Heinz anchor must be caught 4 of 4.</li>
+  <li><strong>Outcome names and owners.</strong> Matched (nobody acts; the result is recorded) · Updated PO required (Customer Service or Commercial requests the updated PO from the customer, using the agent's draft; the order is rechecked when it arrives) · Fix our side or decide (the Ingredion owner corrects Ingredion's side, with price changes sitting with CBA, Sales and PROS, or a person decides).</li>
+  <li><strong>What the agent never does:</strong> no change to SAP or PROS, no holding or releasing invoices, no message to a customer.</li>
+  <li><strong>Still to confirm:</strong> read access to Ariba and TermSync (Stage 1); read interface or scheduled extract per source (Stage 1); the step list (Stage 2); the agreed variances (Gate 1).</li>
+</ul>
+
+<h2>Engineering review · fifteen points to settle in Stages 1 and 2</h2>
+<p class="sub">Updated for redline v2 and the redlined SOW No. 07 (20 October 2026). Points settled by the redline (validation source, review queue location, scope wording for the fallback design) are closed; the platform move, primary processing and the SOW's new sections (5.3, 5.4, 1.5, 1.7) add new ones.</p>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">#</th><th scope="col">Finding</th><th scope="col">What the documents say</th><th scope="col">Risk if left</th><th scope="col">Recommendation</th><th scope="col">Settle at</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td class="kw">Scope and measures are now contractual; the sample must match them</td><td>SOW No. 07 (2.1, 2.4, 2.7) makes Agent A the primary processor for all email orders, with a scorecard (completion rate, field-level accuracy, undetected errors, reviewer confirmation, handling time, run cost) whose thresholds are set at Gate 1 from a backtest of 500 past POs "including RPA-failed POs" (8.2(b)); scope and fees are not reopened at Gate 1 (8.2(c)).</td><td>A sample weighted to failures sets thresholds for the wrong population; a business case built on it does not survive assisted mode.</td><td>Agree the sample composition in week 0 (RPA successes and failures per cohort, drawn from the June to July 2026 baseline period); completion rate per cohort against the Existing RPA's automation rate on the same cohort as the headline measure; undetected errors measured against the final SAP orders and, from assisted mode, against post-creation change history (requirements item 28).</td><td>Week 0; Gate 1</td></tr>
+    <tr><td>2</td><td class="kw">Cross-cloud connectivity is on the critical path</td><td>The agent runs in the Google Cloud project; the SAP order API sits behind Azure API Management, Salesforce is SaaS, Outlook drafts go through Microsoft Graph.</td><td>Every integration crosses a cloud boundary; firewall, private connectivity and allow-listing take weeks and are owned by three parties.</td><td>Decide in week 0 between private connectivity (Interconnect or VPN to the Azure network) and allow-listed egress with mTLS or OAuth to APIM; register the Graph application and the Salesforce connected app in week 0.</td><td>Week 0; Stage 2 A-D11</td></tr>
+    <tr><td>3</td><td class="kw">Controlled generation on Gemini needs a tested schema</td><td>A2, A3 and A6 return fields in a fixed schema.</td><td>Gemini's schema dialect rejects parts of a Pydantic JSON schema; an untested schema fails at runtime or silently loses fields.</td><td>Translate the schema (done in the gateway), fall back to JSON mode when rejected, validate every answer with the Pydantic model, and run the backtest with controlled generation on to confirm it holds on real POs.</td><td>Stage 1 A-D5</td></tr>
+    <tr><td>4</td><td class="kw">Document AI or Gemini-native reading, per format</td><td>A3 uses Gemini with Document AI "where needed" for scans.</td><td>Reading scans with Gemini alone loses the token confidence the composite score relies on; running Document AI on every digital PDF costs time and money for nothing.</td><td>Document AI for scans and images, Gemini directly for digital PDFs, Excel and Word through readers; decide the routing rule on the Stage 1 sample and record the mean confidence per route.</td><td>Stage 1 A-D2, A-D3</td></tr>
+    <tr><td>5</td><td class="kw">Model Armor template is Ingredion's, and it fails closed</td><td>Model Armor screens email and PO text before every model call.</td><td>A template that is too strict parks real POs for review; one that is too loose lets document text steer the model. Neither is visible until live traffic.</td><td>Ingredion owns the template; measure its block rate on the backtest and in shadow mode; a blocked text parks the case, never calls the model, and is counted on the dashboard.</td><td>Stage 2 A-D9; shadow report</td></tr>
+    <tr><td>6</td><td class="kw">Reviewer load at full volume</td><td>Every case stops at the reviewer in Phase 1; Phase 2 is a Gate 5 decision.</td><td>Primary processing of all cohorts is several times the failed-case volume; a queue nobody can clear becomes the new manual backlog.</td><td>Size reviewer capacity per cohort before each cut-over; shadow each cohort first; put the review app on Cloud Run with single sign-on; define the Phase 2 straight-through criteria early so Gate 5 is a decision, not a design.</td><td>Gate 1; Gate 5</td></tr>
+    <tr><td>7</td><td class="kw">Failing back to the RPA must be a routine operation</td><td>The Existing RPA keeps unmoved cohorts and stays as fallback until Ingredion retires it; Parkar does not change it.</td><td>If the RPA is left to decay while cohorts move, there is no fallback when it is needed.</td><td>Keep the RPA deployable for every cohort until retirement; the kill switch fails back by the same Salesforce routing change that moved the cohort; rehearse once per cohort in shadow; Accenture named as the RPA owner in the RACI.</td><td>Gate 2; runbook A-D25</td></tr>
+    <tr><td>8</td><td class="kw">Exactly-once depends on the SAP method</td><td>A9 creates the order through the SAP order API or a BAPI via APIM; the method is approved at Gate 2.</td><td>A BAPI call has no idempotency key; a timeout after creation leaves no reference to look up, and a retry creates a second order.</td><td>Whatever the method, the lookup before any retry needs the order field that carries the customer PO number and sold-to; APIM can hold the idempotency key and reject a repeat; the write-ahead state and reconciliation on restart stay.</td><td>Gate 2; Stage 2 A-D10</td></tr>
+    <tr><td>9</td><td class="kw">Graph permissions for drafts only</td><td>A6 saves the clarification as an Outlook draft; the reviewer sends it.</td><td>A broad mail permission turns the draft into a message the agent could send, which the design forbids.</td><td>Application permission scoped to the shared mailbox, read and write drafts only, no send; the draft carries the case reference; the draft text also sits on the review item so Graph is never a blocker.</td><td>Stage 2 A-D11</td></tr>
+    <tr><td>10</td><td class="kw">Data residency and perimeter on Google Cloud</td><td>PO data never leaves the Ingredion project; retention per 5.3; the AI-use approval was written for Azure.</td><td>Regions, Vertex AI data-use terms, VPC Service Controls and customer-managed keys are Ingredion security decisions; without them the prototype cannot touch real POs.</td><td>Re-issue the data approval naming Vertex AI, the region and the models; decide VPC Service Controls and CMEK in Stage 2; Document AI and Model Armor run in the same region.</td><td>Week 0; Stage 2</td></tr>
+    <tr><td>11</td><td class="kw">Quota and run cost at primary volume</td><td>Cloud Monitoring tracks completion rate, failure reasons, review queue and run cost.</td><td>Gemini tokens per minute, Document AI pages and Cloud Run concurrency are quotas, not elastic; a cohort cut-over can hit them on day one.</td><td>Measure tokens, pages and latency per case in shadow for each cohort; request quota ahead of cut-over; budget alerts per environment.</td><td>Shadow report per cohort</td></tr>
+    <tr><td>12</td><td class="kw">Computed confidence and an honest answer key</td><td>A3 returns a confidence per field; the backtest scores against final SAP orders.</td><td>Self-reported confidence is uncalibrated, and final orders contain corrections not visible in the PO; both inflate or deflate the Gate 1 numbers.</td><td>Composite per-field score from Document AI confidence, layout agreement, arithmetic consistency and master-data match, calibrated on the backtest; classify every mismatch as document-recoverable or not and report both shares.</td><td>Stage 1 A-D5; Gate 1</td></tr>
+    <tr><td>13</td><td class="kw">Security and production-readiness testing is contractual (5.4)</td><td>Parkar must run static analysis against an agreed secure-coding standard, secrets scanning, dependency scanning on every build, authorization tests of the service identity, adversarial prompt-injection tests before each release and a rehearsed rollback in Test before Gate 4; critical and high findings close before Gate 4, medium before Gate 5.</td><td>A pipeline without these from the first Stage 3 build means a scramble before Gate 4; prompt-injection tests written late test guardrails nobody tuned.</td><td>Put static analysis, secrets and dependency scanning in the pipeline on day one of Stage 3 (requirements item 26 asks Ingredion for the standard, the tools and the severity scale); keep a prompt-injection corpus in the repository and run it against Model Armor and the pattern guard in the evaluation suite; script the rollback (previous prompts, models, rules, configuration) and rehearse it in Test.</td><td>Stage 2 A-D12; Stage 3; Gate 4</td></tr>
+    <tr><td>14</td><td class="kw">Pre-existing materials and the repository (1.7, 5.1)</td><td>All Agent Work Product is Ingredion's and lives only in Ingredion's repository; Parkar must identify in writing any pre-existing materials before incorporating them and may use them only with Ingredion's approval; no copies are retained after closure.</td><td>The shared factory runtime in <code>Ingredion/</code> is exactly such material; built on silently, it becomes a dispute at Gate 6 and a licence question for the AMS partner.</td><td>Declare the factory runtime and its open-source dependencies in writing before Stage 3 and list them in A-D16a; move the code into Ingredion's repositories in week 0 and develop there; keep the generic parts separable so Parkar can reuse them elsewhere without Ingredion data or configuration.</td><td>Week 0; before Stage 3</td></tr>
+    <tr><td>15</td><td class="kw">Run model and Knowledge Transition to the AMS partner (1.5, Stage 6)</td><td>Before Gate 4 the release readiness pack must carry a run model agreed with Ingredion (operating owner, monitoring and alert routing, severity definitions and escalation, hand-off to warranty and to the AMS partner, indicative run cost); Stage 6 adds reverse shadowing in which the AMS partner operates the agent with Parkar support, signed off at Gate 6; a 90-day warranty follows.</td><td>Without a named run owner and AMS partner early, the run model is written for nobody and Gate 6 has no one to accept the handover.</td><td>Ask for the run owner and the AMS partner by Gate 4 (requirements item 27); design the runbook, dashboards and alert routing for that operator from Stage 2; carry the incident severities (Sev 1 response 2 business hours, Sev 2 four hours, Sev 3 one business day) into the health and kill-switch design of the ops router.</td><td>Gate 4; end of Stage 5; Gate 6</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Stages, gates and dates for both agents</h2>
+<div class="tbl"><table>
+  <thead><tr><th scope="col">Stage</th><th scope="col">Agent A · Email Order Intake (SOW No. 07, redline v2)</th><th scope="col">Agent B · Pre-bill Validation (SOW No. 07, redline v2)</th><th scope="col">Gate decided by</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Week 0 mobilisation</td><td>Week of 26 October 2026 · Google Cloud Dev project, service accounts, connectivity decision, Graph and Salesforce apps, the 500-PO historical sample within 5 working days</td><td>Week of 26 October 2026 · access to the six sources and the sample of past orders within 5 working days</td><td>—</td></tr>
+    <tr><td class="k">1 Discovery and Assessment</td><td>Weeks 1 to 3 · baseline per cohort, exception map, architecture, prototype and backtest, validation-location recommendation · Gate 1 at week 3</td><td>Weeks 1 to 3 · baseline, test cases, gap map, architecture, prototype and backtest · Gate 1 at week 3 (the 10-week PoC calendar of the 7 Oct brief is superseded)</td><td>Sponsor (go/no-go for build; validation location)</td></tr>
+    <tr><td class="k">2 Solution Design</td><td>Weeks 4 to 5 · Google Cloud services confirmed, SAP method approved, review app design · Gate 2 at week 5</td><td>Weeks 4 to 5 · step list confirmed · Gate 2 at week 5</td><td>Technical lead (design approval)</td></tr>
+    <tr><td class="k">3 Build</td><td>Weeks 6 to 10 · Gate 3 at week 10</td><td>Weeks 6 to 9 · Gate 3 at week 9</td><td>Sponsor (evaluation passes in Dev; build documentation and test cases delivered)</td></tr>
+    <tr><td class="k">4 Test and Validation</td><td>Weeks 11 to 13 · Gate 4 at week 13</td><td>Weeks 10 to 12 · Gate 4 at week 12</td><td>Sponsor (release approval; UAT signed off, thresholds met, 5.4 findings closed, run model agreed)</td></tr>
+    <tr><td class="k">5 Production Release</td><td>Weeks 14 to 17 · shadow then assisted, now per cohort · Gate 5 at week 17</td><td>Weeks 13 to 15 · shadow 1 week, assisted 2 weeks · Gate 5 at week 15</td><td>Sponsor (production acceptance; Phase 2 decision for Agent A)</td></tr>
+    <tr><td class="k">6 Hyper Care and Handover</td><td>Weeks 18 to 21 · Knowledge Transition to the AMS partner · Gate 6 at week 22</td><td>Weeks 16 to 19 · Knowledge Transition to the AMS partner · Gate 6 at week 20</td><td>Run owner, with the AMS partner's sign-off (closure)</td></tr>
+  </tbody>
+</table></div>
+<p class="note">Both plans are fixed in SOW No. 07 (redline v2, 20 October 2026): both agents start in week 0 on 26 October 2026; Agent A reaches Gate 5 in week 17 and closes at Gate 6 in week 22, Agent B reaches Gate 5 in week 15 and closes in week 20. Stage 1's three weeks count from the day access and the historical sample are both in place (8.2(c)); Ingredion reviews deliverables and gives gate decisions within 5 working days (4.2); scope and fees are not reopened at Gate 1 (8.2(c)), the scorecard thresholds are.</p>
+
+<h2>How this maps onto the repository</h2>
+<p>Implemented in the <code>Ingredion/</code> folder on 19 and 21 October (82 tests on stubs and a fake model; <code>python -m factory.evaluation prebill</code> returns the Kraft Heinz anchor at 4 of 4 with no false alarms). The shared runtime is one package; each agent is a set of thin step modules plus connector contracts whose real implementations are written against the interfaces Ingredion confirms in Stage 1.</p>
+<pre>Ingredion/
+  factory/                      shared runtime; imports neither agent
+    case.py                     Case, Flag, StepResult
+    intake/                     state machines (A and B), one-case-once claims, pollers with markers
+    guardrails/                 PatternGuard (Dev) · ModelArmorGuard (fails closed) · GuardChain
+    model_gateway/              VertexStructuredExtractor (Gemini, response schema with JSON-mode fallback) ·
+                                DocumentAIReader · Word, Excel and text readers · PromptRegistry (prompts/*.vN.md) ·
+                                GuardedExtractor · legacy Foundry client for the conversation API
+    rules/                      closed reason-code catalogue (67 codes, routing, owners) · rule engine · composite confidence
+    review/                     review queue (memory | Mongo) · /api/review router · decisions captured
+    audit/                      append-only store (no update, no delete) · outcome markers
+    evaluation/                 Order Intake and pre-bill scorecards · CLI
+    observability/              OpenTelemetry → Cloud Trace · kill switch (env | memory | Mongo) · /api/ops router
+  order_intake_agent/           models · OrderIntakePolicy (mode primary | fallback) · connectors (Salesforce queue and cases,
+                                SAP reads, SAP order API, Graph drafts; protocols + stubs) · steps a1..a10 ·
+                                pipeline (gate, exits to the manual queue, write-ahead submitting, lookup before retry,
+                                incompletion log) · case store · runtime
+  prebill_agent/                canonical schema · normalise · four checks with verdicts · outcome labels and owners per
+                                redline v2 · connectors (read-only; Cloud Storage extract landing) · steps b1..b8 ·
+                                pipeline (recheck) · Kraft Heinz fixtures
+  app/                          FastAPI service mounting the review and ops routers
+  Ingredion_docs/redline-v2/    the three redline diagrams and the redlined SOW No. 07 this page follows
+  tests/                        factory/ · order_intake/ · prebill/ · API</pre>
+<p class="note">Still outside the code: real connectors (Stage 1 interfaces), the review page, single sign-on, child cases for multi-PO emails, the cross-cloud network path, and the backtest data, which Ingredion provides.</p>
+
+<footer>Sources: Statement of Work No. 07, Ingredion redline v2 (redacted), 20 Oct 2026 · Ingredion redline v2 diagrams, 20 Oct 2026 (Agent A proposed process and architecture on Google Cloud; Agent B future-state architecture and PO alignment flow) · Email Order Intake Agent, SOW scope sections Draft 3.0, 6 Oct 2026 · Email Order Intake Agent, SOW walkthrough deck Draft 3.0, 6 Oct 2026 · Email Order Intake Agent, responses to SOW clarification questions (added 19 Oct 2026) · Pre-bill Validation and Dispute Prevention Agent, SOW Draft 1.1 technical walkthrough, 10 Oct 2026 · Pre-Bill Validation business briefing, 2 Oct 2026 · discovery session transcript, 24 Sep 2026 · workflow sketch, 16 Oct 2026. Figures are quoted from the documents; proposals are marked as such and stand until each SOW's Gate 1 and Gate 2.</footer>
+</div>

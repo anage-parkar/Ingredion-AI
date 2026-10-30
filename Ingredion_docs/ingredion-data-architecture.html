@@ -1,0 +1,611 @@
+<title>Ingredion Data Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Same reading column and tokens as the Agent Workflows page, plus three layer colours for bronze, silver and gold. Diagrams sit in their own horizontal scrollers. */
+  :root {
+    --bg: #F5F7FA; --fg: #1B232D; --muted: #5C6774; --line: #D2D9E2; --surface: #FFFFFF; --band: #EBEFF4;
+    --ai: #A3650C; --ai-fill: #FBF0DC; --ok: #2B7A58; --ok-fill: #E4F3EC; --code-bg: #EDF0F4;
+    --wr: #2F5BD8; --wr-fill: #E6ECFB; --exit: #B3261E; --exit-fill: #FBE8E6;
+    --bz: #9A5B1F; --bz-fill: #F6E7D8; --sv: #5F6E80; --sv-fill: #E7ECF2; --gd: #8A6A00; --gd-fill: #FBF1CC;
+    --display: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131920; --fg: #E5EAF1; --muted: #9AA7B6; --line: #2C3742; --surface: #1B232D; --band: #19212A;
+      --ai: #E2A84F; --ai-fill: #3B2D14; --ok: #5FC08F; --ok-fill: #17392A; --code-bg: #1E2731;
+      --wr: #8EA6F7; --wr-fill: #1C2A4D; --exit: #F08C84; --exit-fill: #47201D;
+      --bz: #D99A5B; --bz-fill: #3A2816; --sv: #A9B6C6; --sv-fill: #273140; --gd: #E0BE4A; --gd-fill: #3A3112; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131920; --fg: #E5EAF1; --muted: #9AA7B6; --line: #2C3742; --surface: #1B232D; --band: #19212A;
+    --ai: #E2A84F; --ai-fill: #3B2D14; --ok: #5FC08F; --ok-fill: #17392A; --code-bg: #1E2731;
+    --wr: #8EA6F7; --wr-fill: #1C2A4D; --exit: #F08C84; --exit-fill: #47201D;
+    --bz: #D99A5B; --bz-fill: #3A2816; --sv: #A9B6C6; --sv-fill: #273140; --gd: #E0BE4A; --gd-fill: #3A3112; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; }
+  header h1 { font-family: var(--display); font-weight: 600; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 0 0 8px; text-wrap: balance; }
+  header p.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); margin-top: 14px; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 48px 0 10px; text-wrap: balance; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 26px 0 8px; }
+  p { max-width: 72ch; }
+  .verdict { display: grid; grid-template-columns: auto 1fr; gap: 14px 18px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-top: 22px; }
+  .verdict .pill { background: var(--ok-fill); color: var(--ok); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
+  .verdict .pill.amber { background: var(--ai-fill); color: var(--ai); }
+  .verdict p { margin: 0; }
+  .verdict ol, .verdict ul { margin: 10px 0 0; padding-left: 20px; }
+  .verdict li { margin: 5px 0; }
+  @media (max-width: 560px) { .verdict { grid-template-columns: 1fr; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 22px; height: 12px; border: 1.5px solid currentColor; border-radius: 3px; background: var(--surface); color: var(--fg); }
+  .legend i.ai { background: var(--ai-fill); border-color: var(--ai); }
+  .legend i.wr { background: var(--wr-fill); border-color: var(--wr); }
+  .legend i.exit { background: var(--exit-fill); border-color: var(--exit); }
+  .legend i.bz { background: var(--bz-fill); border-color: var(--bz); }
+  .legend i.sv { background: var(--sv-fill); border-color: var(--sv); }
+  .legend i.gd { background: var(--gd-fill); border-color: var(--gd); }
+  .legend i.human { border-style: dashed; }
+  .legend i.opt { border-style: dotted; }
+  .legend i.audit { background: var(--band); border-color: var(--line); }
+  figure { margin: 0; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .dg { display: block; width: 1220px; max-width: none; height: auto; }
+  @media (min-width: 1200px) { .dg { width: 100%; } }
+  figcaption { font-size: 13.5px; color: var(--muted); margin-top: 10px; max-width: 80ch; }
+  .dg text { font-family: var(--body); font-size: 11px; fill: currentColor; }
+  .dg .t { font-size: 12px; font-weight: 600; }
+  .dg .lane { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; fill: var(--muted); }
+  .dg .lbl { fill: var(--muted); }
+  .dg .band { fill: var(--band); stroke: none; }
+  .dg .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .dg .ai { fill: var(--ai-fill); stroke: var(--ai); }
+  .dg .wr { fill: var(--wr-fill); stroke: var(--wr); }
+  .dg .exit { fill: var(--exit-fill); stroke: var(--exit); }
+  .dg .bz { fill: var(--bz-fill); stroke: var(--bz); }
+  .dg .sv { fill: var(--sv-fill); stroke: var(--sv); }
+  .dg .gd { fill: var(--gd-fill); stroke: var(--gd); }
+  .dg .human { stroke-dasharray: 6 4; }
+  .dg .opt { stroke-dasharray: 2 3; }
+  .dg .chip { fill: var(--surface); stroke: currentColor; stroke-width: 1; }
+  .dg .chip.ok { fill: var(--ok-fill); stroke: var(--ok); }
+  .dg .ln { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .dg .ln.thin { stroke-width: 1; }
+  .dg .wrln { fill: none; stroke: var(--wr); stroke-width: 1.3; }
+  .dg .exln { fill: none; stroke: var(--exit); stroke-width: 1.3; }
+  .dg .gdln { fill: none; stroke: var(--gd); stroke-width: 1.3; }
+  .dg .mk { fill: currentColor; }
+  .dg .mk-wr { fill: var(--wr); }
+  .dg .mk-ex { fill: var(--exit); }
+  .dg .mk-gd { fill: var(--gd); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .02em; color: var(--muted); }
+  td.k { font-weight: 600; white-space: nowrap; }
+  .tbl { overflow-x: auto; }
+  .tbl table { min-width: 680px; }
+  .yes { color: var(--ok); font-weight: 600; white-space: nowrap; }
+  .cond { color: var(--ai); font-weight: 600; white-space: nowrap; }
+  .flag { color: var(--exit); font-weight: 600; white-space: nowrap; }
+  .tbc { font-family: var(--mono); font-size: 11.5px; color: var(--ai); white-space: nowrap; }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 0.92em; }
+  ul.tight, ol.tight { margin: 8px 0; padding-left: 20px; }
+  ul.tight li, ol.tight li { margin: 4px 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; }
+  .two > div { min-width: 0; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+  .note { font-size: 13.5px; color: var(--muted); }
+  .sub { color: var(--muted); font-size: 14px; margin-top: -4px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Ingredion Data Architecture</h1>
+  <p class="lede">How the two agents of the Ingredion Agentic AI Factory sit on the Ingredion Google Cloud data platform: SAP and Salesforce data replicated by <strong>Acersoft</strong> into a landing zone and refined through <strong>bronze, silver and gold</strong> layers; the agents read from gold and write back through an outbound path. Drawn from the data team's input of 26 October 2026 and SOW No. 07 (Ingredion redline v2, 20 October 2026).</p>
+  <div class="meta"><span>Prepared 26 October 2026 · Parkar delivery team</span><span>Agent A: Email Order Intake, A1 to A10</span><span>Agent B: Pre-bill Validation, B1 to B8</span><span>Companion to the Agent Workflows page</span></div>
+</header>
+
+<section class="verdict" aria-label="What the data team told us and what it changes">
+  <span class="pill amber">Input of 26 Oct</span>
+  <div>
+    <p>The data team runs a medallion platform in the Ingredion Google Cloud environment. What this changes for the agents, and how firm each point is:</p>
+    <ol>
+      <li><strong>Reads move to the platform.</strong> SAP and Salesforce data arrives in a Cloud Storage landing zone through Acersoft in near real time and is refined to gold. Agent A validates against the gold copy of SAP master data and discovers cases from the gold copy of Salesforce. Agent B assembles its evidence from the same place. <span class="yes">Confirmed direction</span>; it is also the answer to the SOW's "validation location" question at Gate 1 (A-D3, B-D3).</li>
+      <li><strong>Writes go back through an outbound path.</strong> The data team describes the same architecture for pushing data to SAP and for updating Salesforce. For Agent A that path carries the A9 order request and the A10 case update. <span class="cond">To be confirmed</span>: who runs the outbound leg, its latency, and how SAP's result (order number, errors, incompletion log) comes back. The SOW baseline is a direct SAP call through API Management; both options are drawn in figure 3 and the agent's state machine handles either.</li>
+      <li><strong>Agent B writes nothing to any Ingredion system</strong>, so it has no outbound leg at all. Its outputs stay in the agent's own stores plus an outcome dataset for reporting.</li>
+      <li><strong>The agents read gold, never bronze.</strong> Bronze is the data team's raw history; it has duplicates, late-arriving changes and the full breadth of SAP and Salesforce data. Gold is the interface, with a schema, a refresh time and an owner.</li>
+      <li><strong>Nothing from the platform goes to Gemini.</strong> The model sees the email, the PO and the agent's own summaries. Master data and order data are used by ordinary code in A4, A5 and B2 to B5.</li>
+      <li><strong>Three things still need a live call</strong> regardless of the platform: the incompletion log right after an order is created, availability (ATP is a calculation, not a table), and PO attachments unless the pipeline replicates files.</li>
+    </ol>
+  </div>
+</section>
+
+<h2>The platform in one picture</h2>
+<p class="sub">Inbound path from the source systems to the agents. The write path is figure 3.</p>
+<div class="legend" aria-hidden="true">
+  <span><i class="bz"></i> bronze</span>
+  <span><i class="sv"></i> silver</span>
+  <span><i class="gd"></i> gold (the agents' interface)</span>
+  <span><i></i> agent runtime and stores</span>
+  <span><i class="opt"></i> ingestion route to be confirmed</span>
+  <span><i class="audit"></i> owned by the Ingredion data team</span>
+</div>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 560" role="img" aria-label="Six source systems feed Acersoft, which lands raw objects in Cloud Storage. Staging loads them to BigQuery, bronze keeps the raw history, silver cleans and conforms it, gold serves it. Agent A and Agent B on Cloud Run read gold only and keep their own operational stores.">
+  <defs>
+    <marker id="p-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="p-arw-gd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-gd" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <!-- platform band -->
+  <rect class="band" x="440" y="118" width="770" height="200" rx="10"/>
+  <text class="lane" x="456" y="140">Ingredion data platform · data team · one project per environment (SOW 5.0)</text>
+
+  <!-- sources -->
+  <text class="lane" x="20" y="52">Source systems</text>
+  <rect class="box" x="20" y="70" width="170" height="38" rx="6"/><text class="t" x="32" y="94">SAP (sales, master data)</text>
+  <rect class="box" x="20" y="122" width="170" height="38" rx="6"/><text class="t" x="32" y="146">Salesforce (cases, files)</text>
+  <rect class="box opt" x="20" y="174" width="170" height="38" rx="6"/><text class="t" x="32" y="198">PROS (price agreements)</text>
+  <rect class="box opt" x="20" y="226" width="170" height="38" rx="6"/><text class="t" x="32" y="250">Ariba (customer POs)</text>
+  <rect class="box opt" x="20" y="278" width="170" height="38" rx="6"/><text class="t" x="32" y="302">TermSync (AR, disputes)</text>
+  <rect class="box opt" x="20" y="330" width="170" height="38" rx="6"/><text class="t" x="32" y="348">Contract and fuel-rate</text><text x="32" y="362">files (shared drives)</text>
+
+  <!-- collector into Acersoft -->
+  <path class="ln thin" d="M190 89 H230 V349 H190 M190 141 H230 M190 193 H230 M190 245 H230 M190 297 H230"/>
+  <path class="ln" d="M230 220 H258" marker-end="url(#p-arw)"/>
+  <rect class="box" x="260" y="160" width="150" height="120" rx="8"/>
+  <text class="t" x="275" y="190">Acersoft</text>
+  <text x="275" y="208">real-time ingestion</text>
+  <text x="275" y="224">change capture or</text>
+  <text x="275" y="240">scheduled replication</text>
+  <text class="lbl" x="275" y="264">method per source: TBC</text>
+
+  <!-- landing -> staging -> bronze -> silver -> gold -->
+  <path class="ln" d="M410 220 H448" marker-end="url(#p-arw)"/>
+  <rect class="box" x="450" y="160" width="130" height="120" rx="8"/>
+  <text class="t" x="464" y="190">Landing</text>
+  <text x="464" y="208">Cloud Storage buckets</text>
+  <text x="464" y="224">raw objects, as received</text>
+  <text x="464" y="240">one prefix per source</text>
+  <text class="lbl" x="464" y="264">immutable, dated</text>
+
+  <path class="ln" d="M580 220 H618" marker-end="url(#p-arw)"/>
+  <rect class="box" x="620" y="160" width="120" height="120" rx="8"/>
+  <text class="t" x="634" y="190">Staging</text>
+  <text x="634" y="208">BigQuery load tables</text>
+  <text x="634" y="224">parsed and typed</text>
+  <text x="634" y="240">transient</text>
+
+  <path class="ln" d="M740 220 H778" marker-end="url(#p-arw)"/>
+  <rect class="box bz" x="780" y="160" width="120" height="120" rx="8"/>
+  <text class="t" x="794" y="190">Bronze</text>
+  <text x="794" y="208">raw history</text>
+  <text x="794" y="224">append-only</text>
+  <text x="794" y="240">every change kept</text>
+  <text class="lbl" x="794" y="264">not for the agents</text>
+
+  <path class="ln" d="M900 220 H938" marker-end="url(#p-arw)"/>
+  <rect class="box sv" x="940" y="160" width="120" height="120" rx="8"/>
+  <text class="t" x="954" y="190">Silver</text>
+  <text x="954" y="208">cleaned, deduplicated</text>
+  <text x="954" y="224">conformed keys</text>
+  <text x="954" y="240">current state per record</text>
+
+  <path class="ln" d="M1060 220 H1088" marker-end="url(#p-arw)"/>
+  <rect class="box gd" x="1090" y="160" width="110" height="120" rx="8"/>
+  <text class="t" x="1104" y="190">Gold</text>
+  <text x="1104" y="208">business-ready</text>
+  <text x="1104" y="224">modelled entities</text>
+  <text x="1104" y="240">refresh time stamped</text>
+  <text class="lbl" x="1104" y="264">the agents' interface</text>
+
+  <!-- latency ticks -->
+  <text class="lbl" x="452" y="336">latency to measure: source change → landing → gold. "Real time" into landing does not make gold real time; the silver and gold jobs add their own cadence.</text>
+
+  <!-- gold -> agents -->
+  <path class="gdln" d="M1145 280 V370 H800 V398" marker-end="url(#p-arw-gd)"/>
+  <path class="gdln" d="M1060 370 V398" marker-end="url(#p-arw-gd)"/>
+  <text class="lbl" x="440" y="362">reads only: BigQuery queries or Pub/Sub change notifications; stale-snapshot guard in the agent</text>
+
+  <rect class="box" x="700" y="400" width="200" height="70" rx="8"/>
+  <text class="t" x="714" y="424">Agent A · Email Order Intake</text>
+  <text x="714" y="442">Cloud Run · A1 to A10</text>
+  <text x="714" y="458">reads cases + SAP master data</text>
+
+  <rect class="box" x="960" y="400" width="200" height="70" rx="8"/>
+  <text class="t" x="974" y="424">Agent B · Pre-bill Validation</text>
+  <text x="974" y="442">Cloud Run · B1 to B8</text>
+  <text x="974" y="458">reads six sources as evidence</text>
+
+  <!-- agent stores -->
+  <rect class="box" x="440" y="400" width="220" height="70" rx="8"/>
+  <text class="t" x="454" y="424">Agent operational stores</text>
+  <text x="454" y="442">Firestore or Cloud SQL: cases, claims,</text>
+  <text x="454" y="458">review queue, append-only audit</text>
+  <path class="ln" d="M700 435 H662" marker-end="url(#p-arw)"/>
+  <path class="ln" d="M1060 470 V492 H550 V472" marker-end="url(#p-arw)"/>
+
+  <!-- model side -->
+  <rect class="box ai" x="20" y="400" width="380" height="70" rx="8"/>
+  <text class="t" x="34" y="424">Vertex AI (Gemini) · Document AI · Model Armor</text>
+  <text x="34" y="442">sees the email, the PO file and the agent's own summaries only;</text>
+  <text x="34" y="458">never a row from the platform</text>
+
+  <text class="lbl" x="20" y="530">Writes (A9 create order, A10 update case) and the three live calls (incompletion log, availability, attachments) are not on this picture: see figures 2 and 3.</text>
+</svg>
+</div>
+<figcaption><strong>Figure 1.</strong> The inbound path. Acersoft replicates the source systems into a landing zone; the data team's jobs load, persist, clean and model the data through staging, bronze, silver and gold. The agents read gold only. The four non-SAP sources of Agent B are drawn dotted because whether they come through Acersoft or through a separate file drop is still to be confirmed.</figcaption>
+</figure>
+
+<h2>Agent A on the platform</h2>
+<p class="sub">Which of the ten steps touch the platform, which still need a live system, and how fresh each read has to be.</p>
+<div class="legend" aria-hidden="true">
+  <span><i class="gd"></i> read from gold</span>
+  <span><i class="ai"></i> generative AI on Vertex AI</span>
+  <span><i class="wr"></i> write to an Ingredion system</span>
+  <span><i class="exit"></i> live call that no copy can replace</span>
+  <span><i class="human"></i> human gate</span>
+</div>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 640" role="img" aria-label="The ten Order Intake steps in a column. Gold entities on the left feed A1, A4 and A5. On the right, A3 fetches attachments, A5 may call availability live, A6 saves a Graph draft, A9 sends the order request and reads the incompletion log live, A10 sends the case update. The human gate sits between A7 and A8.">
+  <defs>
+    <marker id="a-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="a-arw-gd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-gd" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="a-arw-wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-wr" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="a-arw-ex" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-ex" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <text class="lane" x="20" y="40">Gold entities the agent reads</text>
+  <text class="lane" x="420" y="40">Agent A pipeline · Cloud Run</text>
+  <text class="lane" x="900" y="40">Live calls and writes</text>
+
+  <!-- pipeline steps -->
+  <rect class="box" x="420" y="60" width="380" height="38" rx="6"/><text class="t" x="432" y="84">A1 · Pick up the case</text>
+  <rect class="box ai" x="420" y="112" width="380" height="38" rx="6"/><text class="t" x="432" y="136">A2 · Classify the email (Gemini)</text>
+  <rect class="box ai" x="420" y="164" width="380" height="38" rx="6"/><text class="t" x="432" y="188">A3 · Read the PO (Gemini + Document AI)</text>
+  <rect class="box" x="420" y="216" width="380" height="38" rx="6"/><text class="t" x="432" y="240">A4 · Map to SAP fields and validate</text>
+  <rect class="box" x="420" y="268" width="380" height="38" rx="6"/><text class="t" x="432" y="292">A5 · Rules, confidence, duplicate check</text>
+  <rect class="box ai" x="420" y="320" width="380" height="38" rx="6"/><text class="t" x="432" y="344">A6 · Exceptions and clarification draft (Gemini)</text>
+  <rect class="box" x="420" y="372" width="380" height="38" rx="6"/><text class="t" x="432" y="396">A7 · Review summary</text>
+  <rect class="box human" x="420" y="424" width="380" height="30" rx="6"/><text class="t" x="432" y="444">Human gate · Ingredion reviewer approves every case (Phase 1)</text>
+  <rect class="box" x="420" y="468" width="380" height="38" rx="6"/><text class="t" x="432" y="492">A8 · Build the SAP payload (idempotency key on it)</text>
+  <rect class="box wr" x="420" y="520" width="380" height="38" rx="6"/><text class="t" x="432" y="544">A9 · Create the sales order, read the incompletion log</text>
+  <rect class="box wr" x="420" y="572" width="380" height="38" rx="6"/><text class="t" x="432" y="596">A10 · Update the Salesforce case, follow-ups</text>
+  <path class="ln thin" d="M610 98 V112 M610 150 V164 M610 202 V216 M610 254 V268 M610 306 V320 M610 358 V372 M610 410 V424 M610 454 V468 M610 506 V520 M610 558 V572"/>
+
+  <!-- gold entities -->
+  <rect class="box gd" x="20" y="60" width="300" height="38" rx="6"/><text class="t" x="32" y="76">Salesforce cases (email-to-case)</text><text x="32" y="91">new and revised cases, cohort flag, email body</text>
+  <path class="gdln" d="M320 79 H418" marker-end="url(#a-arw-gd)"/>
+
+  <rect class="box gd" x="20" y="150" width="300" height="38" rx="6"/><text class="t" x="32" y="166">Customer master: sold-to, ship-to, bill-to</text><text x="32" y="181">sales area, partner functions, terms, incoterms</text>
+  <rect class="box gd" x="20" y="194" width="300" height="38" rx="6"/><text class="t" x="32" y="210">Material master and units of measure</text><text x="32" y="225">sales unit, conversion factors, plant, status</text>
+  <rect class="box gd" x="20" y="238" width="300" height="38" rx="6"/><text class="t" x="32" y="254">Customer-material info records (CMIR)</text><text x="32" y="269">customer part number to SAP material</text>
+  <path class="gdln" d="M320 169 H370 V235 H418" marker-end="url(#a-arw-gd)"/>
+  <path class="gdln" d="M320 213 H370"/>
+  <path class="gdln" d="M320 257 H370"/>
+
+  <rect class="box gd" x="20" y="296" width="300" height="38" rx="6"/><text class="t" x="32" y="312">Price conditions and contracts</text><text x="32" y="327">valid-from and valid-to, open contract quantity</text>
+  <rect class="box gd" x="20" y="340" width="300" height="38" rx="6"/><text class="t" x="32" y="356">Open and recent sales orders</text><text x="32" y="371">by customer PO number: duplicate check</text>
+  <path class="gdln" d="M320 315 H370 V287 H418" marker-end="url(#a-arw-gd)"/>
+  <path class="gdln" d="M320 359 H370"/>
+
+  <text class="lbl" x="20" y="404">Freshness needed: cases within minutes;</text>
+  <text class="lbl" x="20" y="419">master data, CMIR and conditions within the hour;</text>
+  <text class="lbl" x="20" y="434">recent orders within minutes, the agent's store covers the lag.</text>
+
+  <!-- live calls and writes -->
+  <rect class="box exit" x="900" y="164" width="300" height="38" rx="6"/><text class="t" x="912" y="180">PO attachments (PDF, scan, Excel, Word)</text><text x="912" y="195">replicated files bucket, or Salesforce API</text>
+  <path class="exln" d="M800 183 H898" marker-end="url(#a-arw-ex)"/>
+
+  <rect class="box exit" x="900" y="268" width="300" height="38" rx="6"/><text class="t" x="912" y="284">Availability (ATP) if checked before the gate</text><text x="912" y="299">live SAP calculation, or left to order creation</text>
+  <path class="exln" d="M800 287 H898" marker-end="url(#a-arw-ex)"/>
+
+  <rect class="box wr" x="900" y="320" width="300" height="38" rx="6"/><text class="t" x="912" y="336">Microsoft Graph: clarification saved as a draft</text><text x="912" y="351">reviewer sends; the agent never emails a Customer</text>
+  <path class="wrln" d="M800 339 H898" marker-end="url(#a-arw-wr)"/>
+
+  <rect class="box wr" x="900" y="508" width="300" height="38" rx="6"/><text class="t" x="912" y="524">SAP: order request (outbound path or APIM)</text><text x="912" y="539">figure 3; result returns with the order number</text>
+  <path class="wrln" d="M800 535 H898" marker-end="url(#a-arw-wr)"/>
+  <rect class="box exit" x="900" y="552" width="300" height="30" rx="6"/><text class="t" x="912" y="571">SAP incompletion log for the new order: live read</text>
+  <path class="exln" d="M800 549 H860 V567 H898" marker-end="url(#a-arw-ex)"/>
+
+  <rect class="box wr" x="900" y="596" width="300" height="38" rx="6"/><text class="t" x="912" y="612">Salesforce: case update (outbound path or API)</text><text x="912" y="627">order number, status, reason codes, follow-ups</text>
+  <path class="wrln" d="M800 591 H860 V615 H898" marker-end="url(#a-arw-wr)"/>
+
+  <!-- stores note -->
+  <rect class="box" x="20" y="520" width="300" height="86" rx="6"/>
+  <text class="t" x="32" y="540">Agent store, not the platform</text>
+  <text x="32" y="556">one-case-once claims, case state, review queue,</text>
+  <text x="32" y="571">audit trail, snapshot of the evidence used,</text>
+  <text x="32" y="586">gold refresh time recorded on every case</text>
+  <path class="ln thin" d="M320 563 H418"/>
+</svg>
+</div>
+<figcaption><strong>Figure 2.</strong> Agent A on the platform. A1, A4 and A5 read gold; A2, A3 and A6 use Gemini on the email and the PO only; A9 and A10 are the two writes. The red boxes are the calls no copy can replace: attachments, availability and the incompletion log. The agent records the gold refresh time it validated against on every case, so a wrong decision can be traced to the data it saw.</figcaption>
+</figure>
+
+<h3>Step by step</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Step</th><th>Data it needs</th><th>Where it comes from</th><th>Layer</th><th>Freshness needed</th><th>Writes</th></tr></thead>
+  <tbody>
+    <tr><td class="k">A1 Pick up</td><td>New and revised email-order cases, cohort flag, email body, sender</td><td>Salesforce Case and EmailMessage, replicated</td><td><span class="yes">gold</span></td><td>Minutes; Pub/Sub notification preferred over polling</td><td>Claim in the agent store</td></tr>
+    <tr><td class="k">A2 Classify</td><td>Email text</td><td>From A1</td><td>none</td><td>n/a</td><td>No</td></tr>
+    <tr><td class="k">A3 Read the PO</td><td>Attachment files</td><td>Replicated files bucket if the pipeline carries binaries, otherwise Salesforce API</td><td><span class="cond">TBC</span></td><td>Same as the case</td><td>No</td></tr>
+    <tr><td class="k">A4 Map and validate</td><td>Customer master incl. ship-to and bill-to, partner functions, material master, units and conversion factors, CMIR, plant and shipping data</td><td>SAP, replicated</td><td><span class="yes">gold</span></td><td>Within the hour; the agent rejects a snapshot older than the agreed limit</td><td>No</td></tr>
+    <tr><td class="k">A5 Rules</td><td>Price conditions, contracts and open quantity, recent orders for the duplicate check, availability</td><td>SAP, replicated; availability live or deferred to A9</td><td><span class="yes">gold</span> + <span class="flag">live</span></td><td>Conditions within the hour; recent orders within minutes plus the agent's own record of what it created</td><td>No</td></tr>
+    <tr><td class="k">A6 Exceptions</td><td>Case context and the gap found</td><td>Agent store</td><td>none</td><td>n/a</td><td>Outlook draft via Microsoft Graph</td></tr>
+    <tr><td class="k">A7 Review</td><td>Everything above</td><td>Agent store</td><td>none</td><td>n/a</td><td>Review queue entry</td></tr>
+    <tr><td class="k">A8 Payload</td><td>Validated fields</td><td>Agent store</td><td>none</td><td>n/a</td><td>No; carries the idempotency key</td></tr>
+    <tr><td class="k">A9 Create order</td><td>Payload; then the incompletion log</td><td>SAP through the outbound path or API Management; log read live</td><td><span class="cond">outbound TBC</span></td><td>Result within minutes of approval</td><td><span class="flag">Yes</span>, SAP sales order</td></tr>
+    <tr><td class="k">A10 Update case</td><td>Order number, status, reason codes</td><td>Salesforce through the outbound path or API</td><td><span class="cond">outbound TBC</span></td><td>Minutes</td><td><span class="flag">Yes</span>, Salesforce case</td></tr>
+  </tbody>
+</table></div>
+<p class="note">Entity names above are the business objects. The matching SAP tables (customer general and sales-area data, material and unit conversions, customer-material info records, condition records, sales document header, item and business data, the incompletion log) are listed with the data team against Ingredion's actual SAP release when the gold schema is confirmed.</p>
+
+<h2>The write path: A9 and A10</h2>
+<p class="sub">The SOW baseline is a direct call through API Management. The data team describes an outbound path through the platform. The agent is built so that either works; what differs is latency and where the result comes from.</p>
+<div class="legend" aria-hidden="true">
+  <span><i class="wr"></i> write</span>
+  <span><i class="exit"></i> live read</span>
+  <span><i class="gd"></i> platform dataset</span>
+  <span><i class="audit"></i> owned by Ingredion (data team or integration team)</span>
+</div>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 590" role="img" aria-label="Two options for creating the order. Option 1: Agent A calls SAP synchronously through API Management, gets the order number in the response and reads the incompletion log. Option 2: Agent A writes a request row to an outbound command dataset; an outbound integration posts it to SAP; an acknowledgement row carries the order number back; the created order later appears in gold. Below, the agent's state machine: approved, submitting, then confirmed, failed or unknown; unknown triggers a lookup before any retry.">
+  <defs>
+    <marker id="w-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="w-arw-wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-wr" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="w-arw-ex" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-ex" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <!-- option 1 -->
+  <text class="lane" x="20" y="40">Option 1 · synchronous through API Management (SOW baseline)</text>
+  <rect class="box" x="20" y="60" width="180" height="60" rx="8"/><text class="t" x="34" y="84">Agent A · A9</text><text x="34" y="102">Cloud Run, after approval</text>
+  <rect class="band" x="240" y="52" width="320" height="76" rx="8"/>
+  <rect class="box" x="252" y="60" width="140" height="60" rx="8"/><text class="t" x="266" y="84">API Management</text><text x="266" y="102">Azure, allow-listed egress</text>
+  <rect class="box" x="408" y="60" width="140" height="60" rx="8"/><text class="t" x="422" y="84">SAP</text><text x="422" y="102">order API or BAPI</text>
+  <path class="wrln" d="M200 80 H250" marker-end="url(#w-arw-wr)"/>
+  <path class="wrln" d="M392 80 H406" marker-end="url(#w-arw-wr)"/>
+  <path class="ln" d="M408 104 H392" marker-end="url(#w-arw)"/>
+  <path class="ln" d="M252 104 H202" marker-end="url(#w-arw)"/>
+  <text class="lbl" x="80" y="146">response in seconds: order number or error</text>
+  <path class="exln" d="M60 120 V176 H540 V122" marker-end="url(#w-arw-ex)"/>
+  <text class="lbl" x="80" y="196">incompletion log read live through the same path, recorded on the case</text>
+
+  <!-- option 2 -->
+  <text class="lane" x="620" y="40">Option 2 · asynchronous through the platform's outbound path (data team)</text>
+  <rect class="box" x="620" y="60" width="160" height="60" rx="8"/><text class="t" x="634" y="84">Agent A · A9</text><text x="634" y="102">writes one request row</text>
+  <rect class="box gd" x="820" y="60" width="190" height="60" rx="8"/><text class="t" x="834" y="78">Outbound command dataset</text><text x="834" y="94">request_id, idempotency_key,</text><text x="834" y="110">payload, status = requested</text>
+  <path class="wrln" d="M780 80 H818" marker-end="url(#w-arw-wr)"/>
+  <rect class="band" x="820" y="140" width="380" height="76" rx="8"/>
+  <rect class="box" x="832" y="148" width="180" height="60" rx="8"/><text class="t" x="846" y="170">Outbound integration</text><text x="846" y="186">Acersoft or middleware:</text><text x="846" y="200">picks up, posts, acknowledges</text>
+  <rect class="box" x="1050" y="148" width="138" height="60" rx="8"/><text class="t" x="1064" y="172">SAP</text><text x="1064" y="190">BAPI, IDoc or API</text>
+  <path class="ln" d="M905 120 V146" marker-end="url(#w-arw)"/>
+  <path class="wrln" d="M1012 170 H1048" marker-end="url(#w-arw-wr)"/>
+  <path class="ln" d="M1050 194 H1014" marker-end="url(#w-arw)"/>
+  <rect class="box gd" x="820" y="240" width="190" height="60" rx="8"/><text class="t" x="834" y="258">Acknowledgement row</text><text x="834" y="274">status = succeeded or failed,</text><text x="834" y="290">order number, messages</text>
+  <path class="ln" d="M905 208 V238" marker-end="url(#w-arw)"/>
+  <path class="ln" d="M820 270 H700 V122" marker-end="url(#w-arw)"/>
+  <text class="lbl" x="620" y="156">agent waits: Pub/Sub on the</text>
+  <text class="lbl" x="620" y="171">acknowledgement, or polls</text>
+  <text class="lbl" x="620" y="186">with a timeout</text>
+  <rect class="box gd" x="1020" y="240" width="180" height="60" rx="8"/><text class="t" x="1034" y="258">Gold: sales orders</text><text x="1034" y="274">the created order arrives later</text><text x="1034" y="290">through the inbound path</text>
+  <path class="ln thin opt" d="M1114 208 V238"/>
+  <text class="lbl" x="620" y="326">latency = pick-up interval + SAP posting + acknowledgement: minutes, to be measured; the incompletion log</text>
+  <text class="lbl" x="620" y="341">still needs a live read, or the integration returns it in the acknowledgement</text>
+
+  <!-- state machine -->
+  <text class="lane" x="20" y="396">The agent's A9 state machine, the same for both options</text>
+  <rect class="chip" x="20" y="414" width="110" height="32" rx="16"/><text class="t" x="44" y="434">approved</text>
+  <path class="ln" d="M130 430 H158" marker-end="url(#w-arw)"/>
+  <rect class="chip" x="160" y="414" width="150" height="32" rx="16"/><text class="t" x="178" y="434">submitting (written first)</text>
+  <path class="ln" d="M310 430 H338" marker-end="url(#w-arw)"/>
+  <rect class="chip ok" x="340" y="414" width="120" height="32" rx="16"/><text class="t" x="366" y="434">confirmed</text>
+  <path class="ln" d="M235 446 V480 H338" marker-end="url(#w-arw)"/>
+  <rect class="chip" x="340" y="464" width="120" height="32" rx="16"/><text class="t" x="378" y="484">failed</text>
+  <path class="ln" d="M235 480 V514 H338" marker-end="url(#w-arw)"/>
+  <rect class="chip" x="340" y="498" width="120" height="32" rx="16"/><text class="t" x="368" y="518">unknown</text>
+  <path class="ln" d="M460 514 H498" marker-end="url(#w-arw)"/>
+  <rect class="chip" x="500" y="498" width="300" height="32" rx="16"/><text class="t" x="518" y="518">look up by idempotency key and PO number first</text>
+  <path class="ln" d="M800 514 H838" marker-end="url(#w-arw)"/>
+  <rect class="chip ok" x="840" y="498" width="130" height="32" rx="16"/><text class="t" x="860" y="518">found: confirmed</text>
+  <rect class="chip exit" x="840" y="540" width="200" height="32" rx="16"/><text class="t" x="858" y="560">not found: alert, no blind retry</text>
+  <path class="ln" d="M650 530 V556 H838" marker-end="url(#w-arw)"/>
+  <text class="lbl" x="480" y="434">confirmed: order number on the case, incompletion log read, A10 queued</text>
+  <text class="lbl" x="480" y="484">failed: SAP messages mapped to reason codes, case back to the reviewer</text>
+</svg>
+</div>
+<figcaption><strong>Figure 3.</strong> Creating the order. With option 1 the order number comes back in the response and the reviewer sees it within seconds. With option 2 the agent writes a request row, the integration posts it to SAP and acknowledges, and the agent waits for that acknowledgement. The state machine below is already how the pipeline is designed: the "submitting" state is written before the request leaves, so a crash or a timeout never leads to a second order. A10 follows the same pattern towards Salesforce.</figcaption>
+</figure>
+
+<div class="two">
+  <div>
+    <h3>What option 2 must guarantee</h3>
+    <ul class="tight">
+      <li><strong>At-least-once with idempotency.</strong> The integration may retry; SAP must create one order per idempotency key (case id, PO number, revision). If SAP cannot enforce that, the integration keeps a key table and the agent's lookup is the last line of defence.</li>
+      <li><strong>A result for every request.</strong> Every request row ends as succeeded or failed with SAP's messages, within an agreed time. Silence is "unknown" and triggers the lookup, never a retry.</li>
+      <li><strong>Latency the reviewer can live with.</strong> Approval to order number in minutes, with p95 agreed. Longer than that and the reviewer loses the loop; the SOW's Phase 1 is built on a person seeing the result.</li>
+      <li><strong>The incompletion log.</strong> Either the acknowledgement carries it, or the agent still needs one live SAP read after creation. Without it the case cannot be completed truthfully.</li>
+      <li><strong>Dead letters and replay.</strong> A failed post is visible to both teams, replayable with the same key, and never silently dropped.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Recommendation to record at Gate 1</h3>
+    <ul class="tight">
+      <li>Reads from gold for both agents: decided, subject to the latency numbers.</li>
+      <li>A9 through API Management if the SAP API is available in Dev by Stage 3; the result is immediate and the incompletion log is on the same path.</li>
+      <li>Option 2 is acceptable when the guarantees on the left hold and p95 is within the agreed minutes. The connector changes, the steps do not.</li>
+      <li>A10 can use option 2 without much cost: the case update is not time-critical and carries the same key.</li>
+      <li>Whichever is chosen is written into the target architecture (A-D3), the integration specification (A-D10) and the environment design (A-D11), and the SOW wording for A9 is aligned through change control if the outbound path replaces API Management.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Agent B on the platform</h2>
+<p class="sub">Six sources, one evidence set per invoice-ready order, no writes to any Ingredion system.</p>
+<figure>
+<div class="scroll">
+<svg class="dg" viewBox="0 0 1220 560" role="img" aria-label="Six gold sources feed the Pre-bill steps. B1 picks up invoice-ready orders from a gold view, B2 assembles evidence from the six sources, B3 reads the PO file with Gemini and Document AI, B4 normalises, B5 compares with four checks, B6 explains and drafts, B7 routes to the owner through the review queue, B8 records to the agent audit and an outcome dataset. Nothing flows back to SAP, PROS or Salesforce.">
+  <defs>
+    <marker id="b-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="b-arw-gd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="mk-gd" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+  <text class="lane" x="20" y="40">Gold sources (evidence)</text>
+  <text class="lane" x="440" y="40">Agent B pipeline · Cloud Run</text>
+  <text class="lane" x="900" y="40">Outputs (agent-owned)</text>
+
+  <rect class="box gd" x="20" y="60" width="330" height="38" rx="6"/><text class="t" x="32" y="76">SAP: sales order, delivery, billing due, pricing conditions</text><text x="32" y="91">invoice-ready signal (defined in Stage 2), payment terms, freight</text>
+  <rect class="box gd" x="20" y="110" width="330" height="38" rx="6"/><text class="t" x="32" y="126">PROS: price agreements and quotes</text><text x="32" y="141">agreed price per customer, material, validity</text>
+  <rect class="box gd" x="20" y="160" width="330" height="38" rx="6"/><text class="t" x="32" y="176">Salesforce: account, case, PO documents</text><text x="32" y="191">files from the replicated bucket or the API</text>
+  <rect class="box gd" x="20" y="210" width="330" height="38" rx="6"/><text class="t" x="32" y="226">Ariba: customer purchase orders</text><text x="32" y="241">PO lines, prices, terms as the customer issued them</text>
+  <rect class="box gd" x="20" y="260" width="330" height="38" rx="6"/><text class="t" x="32" y="276">TermSync: receivables and dispute records</text><text x="32" y="291">prior disputes by customer, codes, amounts</text>
+  <rect class="box gd" x="20" y="310" width="330" height="38" rx="6"/><text class="t" x="32" y="326">Contract and fuel-rate files</text><text x="32" y="341">landed from shared drives, versioned by effective date</text>
+  <path class="gdln" d="M350 79 H400 V329 H350 M350 129 H400 M350 179 H400 M350 229 H400 M350 279 H400"/>
+  <path class="gdln" d="M400 79 H438" marker-end="url(#b-arw-gd)"/>
+  <path class="gdln" d="M400 131 H438" marker-end="url(#b-arw-gd)"/>
+
+  <rect class="box" x="440" y="60" width="400" height="38" rx="6"/><text class="t" x="452" y="84">B1 · Pick up the invoice-ready order (gold view, one-order-once claim)</text>
+  <rect class="box" x="440" y="112" width="400" height="38" rx="6"/><text class="t" x="452" y="136">B2 · Assemble the evidence from the six sources</text>
+  <rect class="box ai" x="440" y="164" width="400" height="38" rx="6"/><text class="t" x="452" y="188">B3 · Read the PO (Gemini + Document AI, file only)</text>
+  <rect class="box" x="440" y="216" width="400" height="38" rx="6"/><text class="t" x="452" y="240">B4 · Normalise units and currency, match lines</text>
+  <rect class="box" x="440" y="268" width="400" height="38" rx="6"/><text class="t" x="452" y="292">B5 · Compare: price, freight and surcharge, quantity, payment terms</text>
+  <rect class="box ai" x="440" y="320" width="400" height="38" rx="6"/><text class="t" x="452" y="344">B6 · Explain each gap, draft the PO-update request (Gemini)</text>
+  <rect class="box human" x="440" y="372" width="400" height="38" rx="6"/><text class="t" x="452" y="396">B7 · Route to the named owner · human gate</text>
+  <rect class="box" x="440" y="424" width="400" height="38" rx="6"/><text class="t" x="452" y="448">B8 · Record the outcome</text>
+  <path class="ln thin" d="M640 98 V112 M640 150 V164 M640 202 V216 M640 254 V268 M640 306 V320 M640 358 V372 M640 410 V424"/>
+
+  <rect class="box" x="900" y="372" width="300" height="38" rx="6"/><text class="t" x="912" y="388">Review queue and notification</text><text x="912" y="403">Teams or email to the owner; draft only</text>
+  <path class="ln" d="M840 391 H898" marker-end="url(#b-arw)"/>
+  <rect class="box" x="900" y="424" width="300" height="38" rx="6"/><text class="t" x="912" y="440">Agent audit trail (append-only)</text><text x="912" y="455">evidence snapshot, rule results, gold refresh times</text>
+  <path class="ln" d="M840 443 H898" marker-end="url(#b-arw)"/>
+  <rect class="box gd" x="900" y="476" width="300" height="38" rx="6"/><text class="t" x="912" y="492">Outcome dataset in gold (agent-owned tables)</text><text x="912" y="507">for dashboards and the Stage 1 to 5 scorecards</text>
+  <path class="ln" d="M840 452 H870 V495 H898" marker-end="url(#b-arw)"/>
+
+  <rect class="box exit" x="900" y="60" width="300" height="60" rx="8"/>
+  <text class="t" x="912" y="82">No writes to SAP, PROS, Salesforce,</text>
+  <text class="t" x="912" y="98">Ariba or TermSync</text>
+  <text x="912" y="113">no invoice held or released, no Customer contacted</text>
+
+  <text class="lbl" x="20" y="400">Evidence freshness: the order, delivery and billing status within minutes of</text>
+  <text class="lbl" x="20" y="415">invoice-ready; agreements, terms and files as of the order date, so gold</text>
+  <text class="lbl" x="20" y="430">must keep validity ranges, not only the current value.</text>
+  <text class="lbl" x="20" y="470">The variances per check, the source-wins rule and the portal rules are</text>
+  <text class="lbl" x="20" y="485">configuration in the agent, approved at Gate 1, not columns in gold.</text>
+</svg>
+</div>
+<figcaption><strong>Figure 4.</strong> Agent B on the platform. Everything it reads comes from gold; the only generative steps are B3 and B6; its outputs are the review queue, the audit trail and an outcome dataset it owns inside gold for reporting. Because B4 and B5 compare values that were valid on the order date, the gold model needs effective-dated agreements, terms and rate files, not just the latest row.</figcaption>
+</figure>
+
+<h2>What the data team provides: the platform contract</h2>
+<p class="sub">This is what goes into the integration specification (A-D10, B-D10) and the Week 0 access requests. One line per item so that each can be confirmed, dated and owned.</p>
+
+<h3>Datasets, freshness and notification</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Gold entity</th><th>Used by</th><th>Latency target (source change to gold)</th><th>Change signal</th><th>History</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Salesforce cases and emails</td><td>A1, A10 verification</td><td>Under 5 minutes</td><td>Pub/Sub message per new or changed case</td><td>Current state plus change log</td></tr>
+    <tr><td class="k">Salesforce and Ariba PO files</td><td>A3, B2, B3</td><td>Same as the case or PO</td><td>Object notification on the files bucket</td><td>Immutable files, metadata table links file to case</td></tr>
+    <tr><td class="k">Customer master, partner functions</td><td>A4, B2</td><td>Under 60 minutes</td><td>Refresh timestamp column</td><td>Current state, effective dates where SAP has them</td></tr>
+    <tr><td class="k">Material master, units, CMIR</td><td>A4</td><td>Under 60 minutes</td><td>Refresh timestamp column</td><td>Current state</td></tr>
+    <tr><td class="k">Price conditions, contracts, PROS agreements</td><td>A5, B5</td><td>Under 60 minutes</td><td>Refresh timestamp column</td><td>Effective-dated: valid-from and valid-to kept</td></tr>
+    <tr><td class="k">Sales orders, deliveries, billing status</td><td>A5 duplicate check, B1, B2</td><td>Under 5 minutes</td><td>Pub/Sub on invoice-ready transitions for B1</td><td>Current state plus status history</td></tr>
+    <tr><td class="k">TermSync disputes, contract and fuel-rate files</td><td>B2, B5</td><td>Daily is enough</td><td>Refresh timestamp</td><td>Effective-dated versions</td></tr>
+    <tr><td class="k">Outbound command and acknowledgement</td><td>A9, A10</td><td>Pick-up under 1 minute; result p95 to agree</td><td>Pub/Sub on acknowledgement</td><td>Every request and result kept for audit</td></tr>
+  </tbody>
+</table></div>
+<p class="note">Every gold table the agents read carries a source change time, an ingestion time and a gold refresh time. The agents compare the refresh time against the agreed limit before validating; a stale snapshot sends the case to the reviewer with a data-staleness reason code instead of a wrong decision.</p>
+
+<h3>Outbound command contract (if option 2 is chosen)</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Field</th><th>Written by</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td class="k">request_id</td><td>Agent</td><td>Unique per attempt; correlation id in every log line and in the acknowledgement</td></tr>
+    <tr><td class="k">idempotency_key</td><td>Agent</td><td>Case id + customer PO number + revision; SAP or the integration creates at most one order per key</td></tr>
+    <tr><td class="k">target</td><td>Agent</td><td>SAP_ORDER_CREATE or SF_CASE_UPDATE; one contract, two targets</td></tr>
+    <tr><td class="k">payload</td><td>Agent</td><td>The A8 payload as JSON in the agreed schema, or the Salesforce field set for A10</td></tr>
+    <tr><td class="k">status</td><td>Both</td><td>requested, picked, succeeded, failed; anything else after the timeout is treated as unknown by the agent</td></tr>
+    <tr><td class="k">requested_at, picked_at, completed_at</td><td>Both</td><td>Timestamps that make the latency measurable per request</td></tr>
+    <tr><td class="k">result</td><td>Integration</td><td>SAP order number, incompletion log if returned, Salesforce record id</td></tr>
+    <tr><td class="k">error</td><td>Integration</td><td>SAP or Salesforce messages verbatim; the agent maps them to reason codes</td></tr>
+    <tr><td class="k">attempt, dead_letter</td><td>Integration</td><td>Retry count and whether the request was parked for manual replay</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Access, environments and security</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Item</th><th>Dev</th><th>Test</th><th>Prod</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Gold datasets</td><td>Historical slice: the 500-PO sample and the past invoiced orders loaded as gold tables</td><td>Masked or representative data with the same schema</td><td>Live</td></tr>
+    <tr><td class="k">Service accounts</td><td colspan="3">One per agent per environment; BigQuery data viewer on the named gold datasets only; storage object viewer on the files prefix; data editor on the agent's own outbound and outcome datasets; no access to landing, staging, bronze or silver</td></tr>
+    <tr><td class="k">Network</td><td colspan="3">Private access from Cloud Run to BigQuery and Cloud Storage inside the Ingredion perimeter; API Management, Salesforce and Graph reached through allow-listed egress or private connectivity (decision in Week 0)</td></tr>
+    <tr><td class="k">Secrets</td><td colspan="3">Secret Manager only; no credentials in the agent configuration or the platform tables</td></tr>
+    <tr><td class="k">Classification and retention</td><td colspan="3">Data-classification approval for the agents' reads; the agents keep only the evidence snapshot per case, under the retention categories agreed in Stage 2 (SOW 5.3); platform retention stays with the data team</td></tr>
+    <tr><td class="k">Schema change control</td><td colspan="3">Gold schemas versioned; changes announced before release; the agent pipelines run contract tests against the gold schema on every build (SOW 5.4)</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Decisions, risks and open questions</h2>
+<div class="two">
+  <div>
+    <h3>Decisions to record</h3>
+    <ol class="tight">
+      <li><strong>Validation location: Google Cloud, from gold.</strong> Target architecture A-D3 and B-D3 at Gate 1 (20 November 2026).</li>
+      <li><strong>A9 write path:</strong> API Management (baseline) or the outbound path (option 2), decided from the Dev evidence in Stage 2; integration specification A-D10 by 4 December 2026.</li>
+      <li><strong>Attachments:</strong> replicated files bucket or Salesforce API; needed before the prototype reads real cases in week 1.</li>
+      <li><strong>Availability:</strong> checked live before the gate, or left to SAP at creation with the result shown to the reviewer.</li>
+      <li><strong>Duplicate window:</strong> the lag of the sales-order table defines how long the agent's own record must cover.</li>
+      <li><strong>Agent B's four non-SAP sources:</strong> through Acersoft or a separate landing drop; owner and cadence per source.</li>
+    </ol>
+    <h3>Risks for the RAID log (SOW 8.2(c))</h3>
+    <ul class="tight">
+      <li>The ingestion pipeline is an Ingredion dependency: its outage stops validation. Mitigation: the staleness guard routes to review; the kill switch stops intake; no silent decisions on old data.</li>
+      <li>Latency not yet measured: if gold lags more than the agreed minutes, the duplicate check and B1 pick-up degrade. Mitigation: measure in Dev in week 1, agree the SLO at Gate 1.</li>
+      <li>Schema drift in gold breaks connectors. Mitigation: versioned schemas and contract tests in the build pipeline.</li>
+      <li>Test data parity: a Test platform with a different shape from Prod invalidates SIT. Mitigation: same schema in every environment, masked data in Test.</li>
+      <li>Option 2 latency or missing acknowledgements leave orders in "unknown". Mitigation: lookup-before-retry, dead-letter visibility, p95 in the contract.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Questions for the data team this week</h3>
+    <ol class="tight">
+      <li>Project and dataset names per environment; which gold tables already exist for cases, customers, materials, CMIR, conditions, contracts and orders.</li>
+      <li>How Acersoft captures changes per source (log-based change capture, triggers, scheduled extracts) and the measured latency from source change to gold today.</li>
+      <li>Whether Salesforce and Ariba files (PO PDFs, scans, Excel, Word) are replicated, and where.</li>
+      <li>How updates and deletes are represented in silver and gold, and whether effective-dated history is kept for conditions, agreements and terms.</li>
+      <li>The outbound path: which tool posts to SAP and Salesforce, the interface used (BAPI, IDoc, OData, REST), how it acknowledges, and whether it can return the incompletion log.</li>
+      <li>Idempotency: can SAP or the integration reject a second order for the same key.</li>
+      <li>Notifications: Pub/Sub topics on gold refresh or on specific transitions, or do consumers poll.</li>
+      <li>Who owns the gold schema, how changes are announced, and the escalation contact when a refresh fails.</li>
+      <li>Access process and lead time for the two service accounts in Dev, so the Stage 1 clock is not held by IAM.</li>
+      <li>Whether PROS, Ariba, TermSync and the contract and fuel-rate files are already on the platform or need onboarding for Agent B, and by when.</li>
+    </ol>
+  </div>
+</div>
+
+<h2>What this means for the plan</h2>
+<div class="tbl"><table>
+  <thead><tr><th>When</th><th>Agent A</th><th>Agent B</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Week 0 · 26 to 30 Oct</td><td>Add the Dev gold datasets, the files bucket and the two service accounts to the access requests; ask the ten questions; load the 500-PO sample as a Dev gold slice</td><td>Same requests; confirm which of the six sources are already on the platform; load the past invoiced orders incl. Kraft Heinz 809-6862 as a Dev slice</td></tr>
+    <tr><td class="k">Stage 1 · 2 to 20 Nov</td><td>Prototype A2 to A5 against the Dev gold slice; measure gold latency; recommend the validation location and the write path in A-D3</td><td>Prototype B2 to B6 against the Dev slice; evidence assembly as gold queries; B-D3 with the same platform findings</td></tr>
+    <tr><td class="k">Stage 2 · 23 Nov to 4 Dec</td><td>A-D10 integration specification = this contract with the confirmed names, latencies and the chosen write path; A-D11 environment design with the datasets and service accounts</td><td>B-D10 with the six source tables and the invoice-ready view definition; B-D11</td></tr>
+    <tr><td class="k">Stage 3 · Build</td><td>Gold-backed implementations of the Salesforce cases and SAP master data connectors; the chosen A9 and A10 connector; contract tests in the pipeline</td><td>Gold-backed evidence connector; outcome dataset; contract tests</td></tr>
+    <tr><td class="k">Stage 4 · Test</td><td>SIT against the Test platform; latency and staleness scenarios in the test plan; outbound dead-letter drill</td><td>SIT against the Test platform; effective-dated comparisons verified on past orders</td></tr>
+    <tr><td class="k">Stage 5 · Production</td><td>Shadow mode is reads only: gold connected, outbound disabled; assisted mode enables A9 and A10 behind the gate</td><td>Shadow and assisted are the same reads; only the routing to owners is switched on</td></tr>
+  </tbody>
+</table></div>
+
+<footer>
+  Prepared by the Parkar delivery team on 26 October 2026 from the data team's input of the same day, SOW No. 07 (Ingredion redline v2, 20 October 2026) and the Agent Workflows page. Items marked TBC are open with the Ingredion data team; nothing on this page changes the ten Order Intake steps or the eight Pre-bill steps, only where their data comes from and how their two writes travel.
+</footer>
+</div>
